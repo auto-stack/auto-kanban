@@ -1,0 +1,13 @@
+// app.at — App shell. Single-page board; routes just render the board page.
+widget App {
+    routes {
+        "/" -> use board
+    }
+
+    view {
+        col {
+            style: "min-h-screen bg-gray-50 text-gray-900"
+            text "AutoOS Kanban" { style: "text-xl font-bold p-4" }
+        }
+    }
+}

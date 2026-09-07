@@ -1,0 +1,9 @@
+// pages/board.at — placeholder (filled by T12/T13).
+widget board {
+    view {
+        col {
+            style: "p-4"
+            text "board" { style: "text-sm text-gray-400" }
+        }
+    }
+}
