@@ -7,15 +7,179 @@
 //   archived / 未知 → archived（前端折叠区）
 //
 // 数据源解析序（与 auto-os AGENTS.md §2 一致）：
-//   Env.get(root_env) → "../auto-lang" → "D:/autostack/auto-lang" → 错误串。
+//   env.get(root_env) → "../auto-lang" → "D:/autostack/auto-lang" → 错误串。
+//
+// 容器/调用纪律（VM HTTP 后端实测约束，见 boards_registry.at 头注）：
+// 裸数组 + 显式 use auto.* + 动态 JsonValue 导航（fs.read_dir 返回
+// JSON 文件名数组；json.decode[T] 泛型调用 VM codegen 不支持）。
 
 use api: Card, Meta, CardsResult
+use auto.file
+use auto.fs
+use auto.env
+use auto.json
+use auto.time
 
-/// 扫描入口（T9 实装）。容器纪律：裸数组（VM 后端无 List[T]，见
-/// boards_registry.at 头注）。
+/// frontmatter 浅解析结果（六字段，缺失默认 ""/0）。
+type Fm = {
+    plan_id: str
+    status: str
+    feature_name: str
+    current_step: int
+    total_steps: int
+    updated_at: str
+}
+
+/// 数据源根解析：env 覆盖 → 兄弟检出 → 主检出；全落空返回 ""。
+fn resolve_lang_root(env_key str) str {
+    let p str = env.get(env_key)
+    if p != "" {
+        if file.exists(fs.join(p, "docs/plans")) {
+            return p
+        }
+    }
+    if file.exists(fs.join("../auto-lang", "docs/plans")) {
+        return "../auto-lang"
+    }
+    if file.exists(fs.join("D:/autostack/auto-lang", "docs/plans")) {
+        return "D:/autostack/auto-lang"
+    }
+    return ""
+}
+
+/// 状态机 → 列。draft 为 legacy 停泊格式（归 drafting 列，前端加 parked 徽章）。
+fn map_column(status str) str {
+    if status == "executing" {
+        return "executing"
+    }
+    if status == "execution_done" {
+        return "execution_done"
+    }
+    if status == "reviewed" {
+        return "reviewed"
+    }
+    if status == "drafting" {
+        return "drafting"
+    }
+    if status == "draft" {
+        return "drafting"
+    }
+    return "archived"
+}
+
+/// frontmatter 浅解析：首行 `---` 进入，第二个 `---` 退出；逐行
+/// `key: value`，剥 ` #` 行内注释；空值与 `[` 开头的 YAML 列表（如
+/// author）跳过；字段缺失保持默认值。
+fn parse_frontmatter(text str) Fm {
+    var fm Fm = Fm { plan_id: "", status: "", feature_name: "", current_step: 0, total_steps: 0, updated_at: "" }
+    let lines = text.split("\n")
+    var fences int = 0
+    for line in lines {
+        let t str = line.trim()
+        if t == "---" {
+            fences = fences + 1
+            if fences >= 2 {
+                break
+            }
+            continue
+        }
+        if fences != 1 {
+            continue
+        }
+        let ci int = t.find(":")
+        if ci <= 0 {
+            continue
+        }
+        let key str = t.sub(0, ci).trim()
+        // 实测语义为 (start, end 排他)——master stdlib 文档注记 (start,len)
+        // 与运行时不符（Plan 579 探针 a9 定案，待框架侧澄清）。
+        var raw str = t.sub(ci + 1, t.len()).trim()
+        let hi int = raw.find(" #")
+        if hi >= 0 {
+            raw = raw.sub(0, hi).trim()
+        }
+        if raw == "" {
+            continue
+        }
+        if raw.starts_with("[") {
+            continue
+        }
+        if key == "plan_id" {
+            fm.plan_id = raw
+        }
+        if key == "status" {
+            fm.status = raw
+        }
+        if key == "feature_name" {
+            fm.feature_name = raw
+        }
+        if key == "current_step" {
+            fm.current_step = raw.to_int()
+        }
+        if key == "total_steps" {
+            fm.total_steps = raw.to_int()
+        }
+        if key == "updated_at" {
+            fm.updated_at = raw
+        }
+    }
+    return fm
+}
+
+/// 扫描入口：双目录（active + archive）→ 每文件解析 → 映射泛化 Card。
 pub fn scan(root_env str) CardsResult {
-    let cards []Card = []
-    let meta = Meta { source_root: "", scanned_at: "", count_active: 0, count_archived: 0 }
-    let result = CardsResult { cards: cards, meta: meta }
-    return result
+    var cards []Card = []
+    var count_active int = 0
+    var count_archived int = 0
+    let root str = resolve_lang_root(root_env)
+    if root == "" {
+        let msg str = "data source not found: set " + root_env + " env, or place auto-lang checkout at ../auto-lang or D:/autostack/auto-lang"
+        let m = Meta { source_root: msg, scanned_at: time.now(), count_active: 0, count_archived: 0 }
+        let r = CardsResult { cards: cards, meta: m }
+        return r
+    }
+    let dirs = ["docs/plans", "docs/plans/archive"]
+    for d in dirs {
+        let dir_path str = fs.join(root, d)
+        if !file.exists(dir_path) {
+            continue
+        }
+        let entries = json.parse(fs.read_dir(dir_path))
+        for name in entries {
+            // 物化为 owned str 再操作：JsonValue 元素上直接调 str 方法
+            // 分派异常（探针 a6a 返 None）；""+name 强制转真 str（探针 mat）。
+            let fname str = "" + name
+            if !fname.ends_with(".md") {
+                continue
+            }
+            let path str = fs.join(dir_path, fname)
+            let text str = file.read_text(path)
+            let fm Fm = parse_frontmatter(text)
+            let stem str = fname.sub(0, fname.len() - 3)
+            let column str = map_column(fm.status)
+            let is_archived bool = column == "archived"
+            var title str = fm.feature_name
+            if title == "" {
+                title = stem
+            }
+            var cid str = fm.plan_id
+            if cid == "" {
+                cid = stem
+            }
+            var badge str = ""
+            if fm.status == "draft" {
+                badge = "parked"
+            }
+            let card = Card { id: cid, title: title, column: column, badge: badge, current: fm.current_step, total: fm.total_steps, updated_at: fm.updated_at, archived: is_archived, file: fname }
+            cards.push(card)
+            if is_archived {
+                count_archived = count_archived + 1
+            } else {
+                count_active = count_active + 1
+            }
+        }
+    }
+    let m2 = Meta { source_root: root, scanned_at: time.now(), count_active: count_active, count_archived: count_archived }
+    let r2 = CardsResult { cards: cards, meta: m2 }
+    return r2
 }

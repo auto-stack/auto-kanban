@@ -1,0 +1,96 @@
+use auto.file
+use auto.fs
+use auto.json
+use auto.env
+use auto.time
+
+type Fm = {
+    plan_id: str
+    status: str
+    feature_name: str
+    current_step: int
+    total_steps: int
+    updated_at: str
+}
+
+type Card = {
+    id: str
+    title: str
+    column: str
+    badge: str
+    current: int
+    total: int
+    updated_at: str
+    archived: bool
+    file: str
+}
+
+fn map_column(status str) str {
+    if status == "executing" { return "executing" }
+    if status == "execution_done" { return "execution_done" }
+    if status == "reviewed" { return "reviewed" }
+    if status == "drafting" { return "drafting" }
+    if status == "draft" { return "drafting" }
+    return "archived"
+}
+
+fn parse_frontmatter(text str) Fm {
+    var fm Fm = Fm { plan_id: "", status: "", feature_name: "", current_step: 0, total_steps: 0, updated_at: "" }
+    let lines = text.split("\n")
+    var fences int = 0
+    for line in lines {
+        let t str = line.trim()
+        if t == "---" {
+            fences = fences + 1
+            if fences >= 2 { break }
+            continue
+        }
+        if fences != 1 { continue }
+        let ci int = t.find(":")
+        if ci <= 0 { continue }
+        let key str = t.sub(0, ci).trim()
+        var raw str = t.sub(ci + 1, t.len()).trim()
+        let hi int = raw.find(" #")
+        if hi >= 0 { raw = raw.sub(0, hi).trim() }
+        if raw == "" { continue }
+        if raw.starts_with("[") { continue }
+        if key == "plan_id" { fm.plan_id = raw }
+        if key == "status" { fm.status = raw }
+        if key == "feature_name" { fm.feature_name = raw }
+        if key == "current_step" { fm.current_step = raw.to_int() }
+        if key == "total_steps" { fm.total_steps = raw.to_int() }
+        if key == "updated_at" { fm.updated_at = raw }
+    }
+    return fm
+}
+
+fn main() {
+    var cards []Card = []
+    let dirs = ["docs/plans", "docs/plans/archive"]
+    for d in dirs {
+        let dir_path str = fs.join("D:/autostack/auto-lang", d)
+        if !file.exists(dir_path) { continue }
+        let entries = json.parse(fs.read_dir(dir_path))
+        for name in entries {
+            let fname str = "" + name
+            if !name.ends_with(".md") { continue }
+            let path str = fs.join(dir_path, fname)
+            let fm Fm = parse_frontmatter(file.read_text(path))
+            let stem str = fname.sub(0, fname.len() - 3)
+            let column str = map_column(fm.status)
+            var title str = fm.feature_name
+            if title == "" { title = stem }
+            var cid str = fm.plan_id
+            if cid == "" { cid = stem }
+            var badge str = ""
+            if fm.status == "draft" { badge = "parked" }
+            let card = Card { id: cid, title: title, column: column, badge: badge, current: fm.current_step, total: fm.total_steps, updated_at: fm.updated_at, archived: column == "archived", file: fname }
+            cards.push(card)
+        }
+    }
+    print("B-cards:", cards.len())
+    var act int = 0
+    for c in cards { if !c.archived { act = act + 1 } }
+    print("B-active:", act)
+    print("B-now:", time.now())
+}

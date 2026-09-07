@@ -1,0 +1,14 @@
+fn g(text str) str {
+    var acc str = ""
+    let i int = text.find(":")
+    acc = text.sub(i + 1, text.len() - i - 1).trim()
+    return acc
+}
+
+fn main() {
+    let r str = g("a: hello")
+    print("A9-len:")
+    print(r.len())
+    print("A9-val:")
+    print(r)
+}

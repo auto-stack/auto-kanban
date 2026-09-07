@@ -1,0 +1,57 @@
+type Fm = {
+    plan_id: str
+    status: str
+    feature_name: str
+    current_step: int
+    total_steps: int
+    updated_at: str
+}
+
+fn parse_frontmatter(text str) Fm {
+    var plan_id str = ""
+    var status str = ""
+    var feature_name str = ""
+    var current_step int = 0
+    var total_steps int = 0
+    var updated_at str = ""
+    let lines = text.split("\n")
+    var fences int = 0
+    for line in lines {
+        let t str = line.trim()
+        if t == "---" {
+            fences = fences + 1
+            if fences >= 2 { break }
+            continue
+        }
+        if fences != 1 { continue }
+        let ci int = t.find(":")
+        if ci <= 0 { continue }
+        let key str = t.sub(0, ci).trim()
+        var raw str = t.sub(ci + 1, t.len() - ci - 1).trim()
+        let hi int = raw.find(" #")
+        if hi >= 0 { raw = raw.sub(0, hi).trim() }
+        if raw == "" { continue }
+        if raw.starts_with("[") { continue }
+        if key == "plan_id" { plan_id = raw }
+        if key == "status" { status = raw }
+        if key == "feature_name" { feature_name = raw }
+        if key == "updated_at" { updated_at = raw }
+    }
+    let fm = Fm { plan_id: plan_id, status: status, feature_name: feature_name, current_step: current_step, total_steps: total_steps, updated_at: updated_at }
+    return fm
+}
+
+fn main() {
+    let sample str = "---\nplan_id: PLAN-001\nstatus: drafting\nfeature_name: some feature name here\nupdated_at: 2026-09-07\ncurrent_step: 3\ntotal_steps: 9\n---\nbody line one\nbody line two\n"
+    var ids str = ""
+    var i int = 0
+    while i < 55 {
+        let fm Fm = parse_frontmatter(sample)
+        ids = fm.plan_id
+        i = i + 1
+    }
+    print("A7-done")
+    print("ids-len:")
+    print(ids.len())
+    print("END-MARKER")
+}

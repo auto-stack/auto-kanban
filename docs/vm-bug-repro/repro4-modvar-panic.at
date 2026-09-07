@@ -1,0 +1,67 @@
+use auto.file
+use auto.fs
+use auto.json
+use auto.time
+
+// db.at 形态：模块级 var 携带状态（无 struct 跨帧返回）
+var g_plan_id str = ""
+var g_status str = ""
+var g_feature str = ""
+var g_current int = 0
+var g_total int = 0
+var g_updated str = ""
+
+var g_cards []str = []
+
+fn parse_frontmatter(text str) void {
+    g_plan_id = ""
+    g_status = ""
+    g_feature = ""
+    g_current = 0
+    g_total = 0
+    g_updated = ""
+    let lines = text.split("\n")
+    var fences int = 0
+    for line in lines {
+        let t str = line.trim()
+        if t == "---" {
+            fences = fences + 1
+            if fences >= 2 { break }
+            continue
+        }
+        if fences != 1 { continue }
+        let ci int = t.find(":")
+        if ci <= 0 { continue }
+        let key str = t.sub(0, ci).trim()
+        var raw str = t.sub(ci + 1, t.len()).trim()
+        let hi int = raw.find(" #")
+        if hi >= 0 { raw = raw.sub(0, hi).trim() }
+        if raw == "" { continue }
+        if raw.starts_with("[") { continue }
+        if key == "plan_id" { g_plan_id = raw }
+        if key == "status" { g_status = raw }
+        if key == "feature_name" { g_feature = raw }
+        if key == "current_step" { g_current = raw.to_int() }
+        if key == "total_steps" { g_total = raw.to_int() }
+        if key == "updated_at" { g_updated = raw }
+    }
+}
+
+fn main() {
+    let dirs = ["docs/plans", "docs/plans/archive"]
+    for d in dirs {
+        let dir_path str = fs.join("D:/autostack/auto-lang", d)
+        if !file.exists(dir_path) { continue }
+        let entries = json.parse(fs.read_dir(dir_path))
+        for name in entries {
+            let fname str = "" + name
+            if !fname.ends_with(".md") { continue }
+            parse_frontmatter(file.read_text(fs.join(dir_path, fname)))
+            g_cards.push(g_plan_id + "|" + g_status + "|" + g_current.str() + "/" + g_total.str())
+        }
+    }
+    print("modvar-cards:")
+    print(g_cards.len())
+    print("first-len:")
+    print(g_cards[0].len())
+}
