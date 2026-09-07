@@ -1,0 +1,25 @@
+// boards_registry.at — 看板注册中心：读 boards.json + kind 分发缝。
+//
+// v1 唯一 kind = "lang_plans"（lang_plans.at）。未来新看板类型 = 新适配器
+// 模块 + boards.json 条目，本文件的 dispatch 表加一行（Plan 579 v1 边界：
+// 只留 seam，不预建注册机制）。
+//
+// 配置路径解析：Env.get("AUTO_KANBAN_BOARDS") 覆盖 → 默认仓根 boards.json。
+
+use api: BoardDef, Card, Meta, CardsResult
+use lang_plans
+
+/// 读看板注册配置。boards.json 缺失/损坏时返回空列表（前端显示空态）。
+pub fn load_boards() []BoardDef {
+    var result List[BoardDef] = List[BoardDef].new([])
+    return result
+}
+
+/// kind 分发：按 BoardDef.kind 调对应适配器，装配 CardsResult。
+/// 未知 id / 未知 kind → 空 cards + 错误串 meta（source_root 透传前端空态）。
+pub fn load_cards(id str) CardsResult {
+    let empty_cards = List[Card].new([])
+    let meta = Meta { source_root: "", scanned_at: "", count_active: 0, count_archived: 0 }
+    let result = CardsResult { cards: empty_cards, meta: meta }
+    return result
+}

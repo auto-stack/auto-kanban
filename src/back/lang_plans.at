@@ -1,0 +1,20 @@
+// lang_plans.at — 首个看板类型适配器（kind = "lang_plans"）。
+//
+// 扫描 auto-lang docs/plans/*.md + docs/plans/archive/*.md 的 YAML
+// frontmatter（浅解析），五态状态机映射看板列：
+//   drafting / draft(legacy, parked 徽章) → drafting
+//   executing → executing; execution_done → execution_done; reviewed → reviewed
+//   archived / 未知 → archived（前端折叠区）
+//
+// 数据源解析序（与 auto-os AGENTS.md §2 一致）：
+//   Env.get(root_env) → "../auto-lang" → "D:/autostack/auto-lang" → 错误串。
+
+use api: Card, Meta, CardsResult
+
+/// 扫描入口（T9 实装）。
+pub fn scan(root_env str) CardsResult {
+    let cards = List[Card].new([])
+    let meta = Meta { source_root: "", scanned_at: "", count_active: 0, count_archived: 0 }
+    let result = CardsResult { cards: cards, meta: meta }
+    return result
+}

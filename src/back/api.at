@@ -1,0 +1,53 @@
+// api.at — auto-kanban API.
+// Types + endpoints only; logic lives in boards_registry.at（配置+kind 分发）
+// 与 lang_plans.at（首个看板类型适配器）。前端经 `use back.api` 消费。
+
+/// 一个看板的注册定义（boards.json 条目）。
+pub type BoardDef = {
+    id: str
+    title: str
+    kind: str
+    root_env: str
+}
+
+/// 泛化卡片——与数据源解耦（计划板映射：id=plan_id, current/total=
+/// current_step/total_steps, column=五态之一）。
+pub type Card = {
+    id: str
+    title: str
+    column: str
+    badge: str
+    current: int
+    total: int
+    updated_at: str
+    archived: bool
+    file: str
+}
+
+/// 扫描元信息。source_root 为错误串时前端显示空态引导。
+pub type Meta = {
+    source_root: str
+    scanned_at: str
+    count_active: int
+    count_archived: int
+}
+
+/// /api/boards/:id/cards 的返回聚合。
+pub type CardsResult = {
+    cards: []Card
+    meta: Meta
+}
+
+use boards_registry
+
+/// GET /api/boards — 看板列表（读 boards.json）。
+#[api(method = "GET", path = "/api/boards")]
+pub fn boards() []BoardDef {
+    return boards_registry.load_boards()
+}
+
+/// GET /api/boards/:id/cards — 该板卡片 + meta。
+#[api(method = "GET", path = "/api/boards/:id/cards")]
+pub fn cards(id str) CardsResult {
+    return boards_registry.load_cards(id)
+}
