@@ -1,0 +1,6 @@
+node_modules/
+gen/
+dist/
+target/
+*.log
+screenshots/

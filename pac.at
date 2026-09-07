@@ -1,0 +1,18 @@
+// pac.at — auto-kanban（Plan 579，auto-os 伞形首个真实 app）。
+//
+// 配置驱动的通用只读看板：boards.json 注册看板（id/title/kind/root_env），
+// v1 唯一 kind = lang_plans（扫描 auto-lang docs/plans 的 frontmatter，
+// 五态状态机映射看板列）。只读仪表盘——状态翻转归 auto-plan 四技能。
+//
+// 端口 17100/17101：真实 app 17xxx 带（auto-os AGENTS.md §3，与 examples
+// 30NN/80NN 带区分；沿 auto-os-config 17700/17701 先例）。
+
+name: "auto-kanban"
+version: "0.1.0"
+description: "AutoOS kanban — config-driven read-only boards (v1: lang-plans)"
+
+scene: "ui"
+render: "vue"
+title: "Kanban"
+front_port: 17100
+back_port: 17101
