@@ -1,25 +1,89 @@
 // boards_registry.at — 看板注册中心：读 boards.json + kind 分发缝。
 //
 // v1 唯一 kind = "lang_plans"（lang_plans.at）。未来新看板类型 = 新适配器
-// 模块 + boards.json 条目，本文件的 dispatch 表加一行（Plan 579 v1 边界：
+// 模块 + boards.json 条目，本文件的 dispatch 加一行（Plan 579 v1 边界：
 // 只留 seam，不预建注册机制）。
 //
-// 配置路径解析：Env.get("AUTO_KANBAN_BOARDS") 覆盖 → 默认仓根 boards.json。
+// 容器纪律：VM 后端上下文无 List[T] 泛型（实测 Undefined variable: List），
+// 一律用裸数组 []T + push（front store 同型，041 .tabs.push 先例）。
+//
+// 配置路径解析：Env.get("AUTO_KANBAN_BOARDS") 覆盖 → 默认仓根 boards.json
+// （auto run 的 CWD）。文件缺失 → 空列表（前端空态）；内容损坏 → decode
+// 报错（配置 bug 应当响亮）。
+//
+// 错误透传约定：未知 board id / 未知 kind → 空 cards + meta.source_root
+// 携带错误信息（前端据此显示空态引导）。
 
 use api: BoardDef, Card, Meta, CardsResult
 use lang_plans
+use auto.file
+use auto.env
+use auto.json
 
-/// 读看板注册配置。boards.json 缺失/损坏时返回空列表（前端显示空态）。
-pub fn load_boards() []BoardDef {
-    var result List[BoardDef] = List[BoardDef].new([])
+/// boards.json 路径：env 覆盖 → 仓根默认。
+fn boards_config_path() str {
+    let p str = env.get("AUTO_KANBAN_BOARDS")
+    if p != "" {
+        return p
+    }
+    return "boards.json"
+}
+
+/// boards.json 的解码走动态 JsonValue 导航（VM codegen 不支持
+/// json.decode[T] 泛型实例化调用，codegen.rs:9713 not implemented——
+/// 06_todo_api.at 的 data.title 动态访问同型）。
+fn board_defs_from_text(text str) []BoardDef {
+    var result []BoardDef = []
+    let parsed = json.parse(text)
+    if parsed == nil {
+        return result
+    }
+    let entries = parsed.boards
+    if entries == nil {
+        return result
+    }
+    for entry in entries {
+        let def = BoardDef { id: entry.id, title: entry.title, kind: entry.kind, root_env: entry.root_env }
+        result.push(def)
+    }
     return result
 }
 
-/// kind 分发：按 BoardDef.kind 调对应适配器，装配 CardsResult。
-/// 未知 id / 未知 kind → 空 cards + 错误串 meta（source_root 透传前端空态）。
-pub fn load_cards(id str) CardsResult {
-    let empty_cards = List[Card].new([])
-    let meta = Meta { source_root: "", scanned_at: "", count_active: 0, count_archived: 0 }
-    let result = CardsResult { cards: empty_cards, meta: meta }
+/// 读看板注册配置。
+pub fn load_boards() []BoardDef {
+    let path str = boards_config_path()
+    if !file.exists(path) {
+        return []
+    }
+    let text str = file.read_text(path)
+    return board_defs_from_text(text)
+}
+
+/// 错误结果：空 cards + 错误串 meta（source_root 字段透传前端空态）。
+fn error_result(msg str) CardsResult {
+    let cards []Card = []
+    let meta = Meta { source_root: msg, scanned_at: "", count_active: 0, count_archived: 0 }
+    let result = CardsResult { cards: cards, meta: meta }
     return result
+}
+
+/// kind 分发：按 id 找 BoardDef，按 kind 调对应适配器。
+pub fn load_cards(id str) CardsResult {
+    let defs = load_boards()
+    var target BoardDef = BoardDef { id: "", title: "", kind: "", root_env: "" }
+    var found bool = false
+    for b in defs {
+        if b.id == id {
+            let copy = BoardDef { id: b.id, title: b.title, kind: b.kind, root_env: b.root_env }
+            target = copy
+            found = true
+        }
+    }
+    if !found {
+        return error_result("unknown board id: " + id)
+    }
+    if target.kind == "lang_plans" {
+        return lang_plans.scan(target.root_env)
+    }
+    return error_result("unknown board kind: " + target.kind)
 }

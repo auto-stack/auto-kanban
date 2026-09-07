@@ -11,9 +11,10 @@
 
 use api: Card, Meta, CardsResult
 
-/// 扫描入口（T9 实装）。
+/// 扫描入口（T9 实装）。容器纪律：裸数组（VM 后端无 List[T]，见
+/// boards_registry.at 头注）。
 pub fn scan(root_env str) CardsResult {
-    let cards = List[Card].new([])
+    let cards []Card = []
     let meta = Meta { source_root: "", scanned_at: "", count_active: 0, count_archived: 0 }
     let result = CardsResult { cards: cards, meta: meta }
     return result
