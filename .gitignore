@@ -3,5 +3,4 @@ gen/
 dist/
 target/
 *.log
-screenshots/
 .am/
