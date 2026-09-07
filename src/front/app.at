@@ -1,13 +1,53 @@
 // app.at — App shell. Single-page board; routes just render the board page.
+// store import 与页面同别名 `store`（022 app/board 同型）。
+use store: BoardsStore
+
 widget App {
     routes {
         "/" -> use board
     }
 
+    msg { Init, Refresh, SelectBoard(str) }
+
     view {
         col {
             style: "min-h-screen bg-gray-50 text-gray-900"
-            text "AutoOS Kanban" { style: "text-xl font-bold p-4" }
+            // Header
+            row {
+                style: "w-full items-center justify-between p-4 border-b border-gray-200 bg-white"
+                row {
+                    style: "items-center gap-2"
+                    text "AutoOS Kanban" { style: "text-xl font-bold text-gray-800" }
+                    text .store.current_title { style: "text-sm text-gray-400" }
+                }
+                row {
+                    style: "items-center gap-3"
+                    // 板切换按钮组（配置驱动：boards.json 每条目一钮）
+                    for b in .store.boards {
+                        button b.title {
+                            onclick: .SelectBoard(b.id),
+                            style: "px-3 py-1 rounded-lg text-sm border border-gray-300 hover:border-blue-400"
+                        }
+                    }
+                    // 计数标签（handler 预格式——VM view 不能调函数）
+                    text .store.counts_label { style: "text-xs text-gray-400" }
+                    button "↻ 刷新" {
+                        onclick: .Refresh,
+                        style: "px-3 py-1 rounded-lg text-sm bg-blue-500 text-white hover:bg-blue-600"
+                    }
+                }
+            }
+            // Route outlet
+            col {
+                style: "flex-1"
+                outlet
+            }
         }
+    }
+
+    on {
+        .Init -> { store.Init() }
+        .Refresh -> { store.Refresh() }
+        .SelectBoard(id str) -> { store.SelectBoard(id) }
     }
 }

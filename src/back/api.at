@@ -19,6 +19,7 @@ pub type Card = {
     badge: str
     current: int
     total: int
+    progress: str            // 预格式 "3/7" 或 "—"（VM view 不能调函数，Plan 402）
     updated_at: str
     archived: bool
     file: str
@@ -40,14 +41,15 @@ pub type CardsResult = {
 
 use boards_registry
 
-/// GET /api/boards — 看板列表（读 boards.json）。
+/// GET /api/boards — 看板列表（读 boards.json）。函数名避开 store 字段名
+/// （list_boards/board_cards vs .boards/.cards，022 导入无撞名先例）。
 #[api(method = "GET", path = "/api/boards")]
-pub fn boards() []BoardDef {
+pub fn list_boards() []BoardDef {
     return boards_registry.load_boards()
 }
 
 /// GET /api/boards/:id/cards — 该板卡片 + meta。
 #[api(method = "GET", path = "/api/boards/:id/cards")]
-pub fn cards(id str) CardsResult {
+pub fn board_cards(id str) CardsResult {
     return boards_registry.load_cards(id)
 }

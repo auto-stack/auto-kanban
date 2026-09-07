@@ -170,7 +170,11 @@ pub fn scan(root_env str) CardsResult {
             if fm.status == "draft" {
                 badge = "parked"
             }
-            let card = Card { id: cid, title: title, column: column, badge: badge, current: fm.current_step, total: fm.total_steps, updated_at: fm.updated_at, archived: is_archived, file: fname }
+            var prog str = "—"
+            if fm.total_steps > 0 {
+                prog = fm.current_step.str() + "/" + fm.total_steps.str()
+            }
+            let card = Card { id: cid, title: title, column: column, badge: badge, current: fm.current_step, total: fm.total_steps, progress: prog, updated_at: fm.updated_at, archived: is_archived, file: fname }
             cards.push(card)
             if is_archived {
                 count_archived = count_archived + 1

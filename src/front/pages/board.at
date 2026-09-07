@@ -1,9 +1,190 @@
-// pages/board.at — placeholder (filled by T12/T13).
+// pages/board.at — the four-column board + archived fold + empty state.
+// Reads cards from the shared store, filters by column (cf. 022 board page).
+// 模板只读预计算字段（VM view 不能调函数，Plan 402 约束）——progress 为
+// 后端预格式 "3/7"/"—"，列计数/折叠标签为 store 预格式。
+use store: BoardsStore
+
 widget board {
+    msg { Init, ToggleArchived }
+
     view {
         col {
-            style: "p-4"
-            text "board" { style: "text-sm text-gray-400" }
+            style: "p-4 gap-4"
+            // 空态引导（数据源未找到/配置为空）
+            if .store.empty {
+                col {
+                    style: "p-8 items-center gap-2 bg-white rounded-xl border border-gray-200"
+                    text "未找到看板数据" { style: "text-lg font-semibold text-gray-600" }
+                    text "检查 boards.json 配置，或为看板条目的 root_env 设置数据源环境变量（lang-plans 板为 AUTO_LANG_ROOT）" { style: "text-sm text-gray-400" }
+                }
+            }
+            // 四列看板
+            if !.store.empty {
+                row {
+                    style: "w-full gap-4 items-start"
+                    // drafting
+                    col {
+                        style: "w-80 bg-gray-100 rounded-xl flex-shrink-0 p-3 gap-2"
+                        row {
+                            style: "items-center justify-between px-1 py-2"
+                            text "Drafting" { style: "text-sm font-semibold text-gray-700" }
+                            text .store.c_drafting { style: "text-xs text-gray-400 bg-white rounded-full px-2 py-0.5" }
+                        }
+                        col {
+                            style: "gap-2"
+                            for card in .store.cards {
+                                if card.column == "drafting" {
+                                    col {
+                                        key: card.id
+                                        style: "w-full bg-white rounded-lg px-3 py-2 shadow-sm gap-1"
+                                        row {
+                                            style: "items-center gap-2"
+                                            text card.id { style: "text-xs font-mono text-blue-600 bg-blue-50 rounded px-1.5 py-0.5" }
+                                            if card.badge == "parked" {
+                                                text "parked" { style: "text-[10px] text-gray-400 border border-gray-300 rounded px-1" }
+                                            }
+                                            text card.updated_at { style: "ml-auto text-[10px] text-gray-400" }
+                                        }
+                                        text card.title { style: "text-sm font-medium text-gray-800 truncate" }
+                                        text card.progress { style: "text-[10px] text-gray-500" }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    // executing
+                    col {
+                        style: "w-80 bg-gray-100 rounded-xl flex-shrink-0 p-3 gap-2"
+                        row {
+                            style: "items-center justify-between px-1 py-2"
+                            text "Executing" { style: "text-sm font-semibold text-gray-700" }
+                            text .store.c_executing { style: "text-xs text-gray-400 bg-white rounded-full px-2 py-0.5" }
+                        }
+                        col {
+                            style: "gap-2"
+                            for card in .store.cards {
+                                if card.column == "executing" {
+                                    col {
+                                        key: card.id
+                                        style: "w-full bg-white rounded-lg px-3 py-2 shadow-sm gap-1"
+                                        row {
+                                            style: "items-center gap-2"
+                                            text card.id { style: "text-xs font-mono text-blue-600 bg-blue-50 rounded px-1.5 py-0.5" }
+                                            if card.badge == "parked" {
+                                                text "parked" { style: "text-[10px] text-gray-400 border border-gray-300 rounded px-1" }
+                                            }
+                                            text card.updated_at { style: "ml-auto text-[10px] text-gray-400" }
+                                        }
+                                        text card.title { style: "text-sm font-medium text-gray-800 truncate" }
+                                        text card.progress { style: "text-[10px] text-gray-500" }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    // execution_done
+                    col {
+                        style: "w-80 bg-gray-100 rounded-xl flex-shrink-0 p-3 gap-2"
+                        row {
+                            style: "items-center justify-between px-1 py-2"
+                            text "Execution Done" { style: "text-sm font-semibold text-gray-700" }
+                            text .store.c_done { style: "text-xs text-gray-400 bg-white rounded-full px-2 py-0.5" }
+                        }
+                        col {
+                            style: "gap-2"
+                            for card in .store.cards {
+                                if card.column == "execution_done" {
+                                    col {
+                                        key: card.id
+                                        style: "w-full bg-white rounded-lg px-3 py-2 shadow-sm gap-1"
+                                        row {
+                                            style: "items-center gap-2"
+                                            text card.id { style: "text-xs font-mono text-blue-600 bg-blue-50 rounded px-1.5 py-0.5" }
+                                            text card.updated_at { style: "ml-auto text-[10px] text-gray-400" }
+                                        }
+                                        text card.title { style: "text-sm font-medium text-gray-800 truncate" }
+                                        text card.progress { style: "text-[10px] text-gray-500" }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    // reviewed
+                    col {
+                        style: "w-80 bg-gray-100 rounded-xl flex-shrink-0 p-3 gap-2"
+                        row {
+                            style: "items-center justify-between px-1 py-2"
+                            text "Reviewed" { style: "text-sm font-semibold text-gray-700" }
+                            text .store.c_reviewed { style: "text-xs text-gray-400 bg-white rounded-full px-2 py-0.5" }
+                        }
+                        col {
+                            style: "gap-2"
+                            for card in .store.cards {
+                                if card.column == "reviewed" {
+                                    col {
+                                        key: card.id
+                                        style: "w-full bg-white rounded-lg px-3 py-2 shadow-sm gap-1"
+                                        row {
+                                            style: "items-center gap-2"
+                                            text card.id { style: "text-xs font-mono text-blue-600 bg-blue-50 rounded px-1.5 py-0.5" }
+                                            text card.updated_at { style: "ml-auto text-[10px] text-gray-400" }
+                                        }
+                                        text card.title { style: "text-sm font-medium text-gray-800 truncate" }
+                                        text card.progress { style: "text-[10px] text-gray-500" }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                // Archived 折叠区
+                col {
+                    style: "mt-2 bg-white rounded-xl border border-gray-200 p-3 gap-2"
+                    row {
+                        style: "items-center gap-2"
+                        button .toggle_label {
+                            onclick: .ToggleArchived,
+                            style: "text-gray-400 text-sm w-6"
+                        }
+                        text .store.archived_label { style: "text-sm font-semibold text-gray-500" }
+                    }
+                    if .show_archived {
+                        row {
+                            style: "gap-2 flex-wrap"
+                            for card in .store.archived_recent {
+                                col {
+                                    key: card.id
+                                    style: "w-64 bg-gray-50 rounded-lg px-3 py-2 border border-gray-100 gap-1"
+                                    row {
+                                        style: "items-center gap-2"
+                                        text card.id { style: "text-xs font-mono text-gray-500" }
+                                        text card.updated_at { style: "ml-auto text-[10px] text-gray-400" }
+                                    }
+                                    text card.title { style: "text-xs text-gray-600 truncate" }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    model {
+        // 折叠区本地显隐与标签（数据在 store；标签本地——视图不能调函数）
+        var show_archived bool = false
+        var toggle_label str = "▸"
+    }
+
+    on {
+        .Init -> { }
+        .ToggleArchived -> {
+            .show_archived = !.show_archived
+            if .show_archived {
+                .toggle_label = "▾"
+            } else {
+                .toggle_label = "▸"
+            }
         }
     }
 }

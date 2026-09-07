@@ -1,0 +1,142 @@
+// boards_store.at — shared store (k1 pattern, cf. 022 board_store / 018 book_store).
+// Holds the board registry + current board's cards; pages do `use store: BoardsStore`.
+//
+// 计数字段/最近归档在 handler 内预计算——VM view 不能调函数（Plan 402
+// 约束），模板只读字段。handler 间互调沿 041/038/013 先例（.LoadCurrent()）。
+use back.api: list_boards, board_cards
+
+store BoardsStore {
+    model {
+        var boards []BoardDef = []
+        var cards []Card = []
+        var meta Meta = Meta { source_root: "", scanned_at: "", count_active: 0, count_archived: 0 }
+        var current_id str = ""
+        var current_title str = ""
+        var loading bool = false
+        // 空态判据：加载完成但零板/零卡（source_root 跨 fn 返回有静默归 0
+        // 残留（Plan 583 债族），判据只用计数不用 source_root）。
+        var empty bool = false
+        // 四列计数（handler 预计算 + 预格式——VM view 不能调函数）
+        var n_drafting int = 0
+        var n_executing int = 0
+        var n_done int = 0
+        var n_reviewed int = 0
+        var c_drafting str = "0"
+        var c_executing str = "0"
+        var c_done str = "0"
+        var c_reviewed str = "0"
+        var archived_label str = ""
+        // archived 折叠区
+        var show_archived bool = false
+        var archived_recent []Card = []
+        var toggle_label str = "▸"
+        // header 计数标签（预格式）
+        var counts_label str = ""
+    }
+
+    msg { Init, Refresh, SelectBoard(str), ToggleArchived, LoadCurrent }
+
+    on {
+        .Init -> {
+            .loading = true
+            .boards = list_boards()
+            if .boards.len() > 0 {
+                .current_id = .boards[0].id
+                .current_title = .boards[0].title
+                .LoadCurrent()
+            } else {
+                .empty = true
+            }
+            .loading = false
+        }
+        .Refresh -> {
+            .loading = true
+            .boards = list_boards()
+            .LoadCurrent()
+            .loading = false
+        }
+        .SelectBoard(id str) -> {
+            var found bool = false
+            var i int = 0
+            while i < .boards.len() {
+                if .boards[i].id == id {
+                    .current_id = id
+                    .current_title = .boards[i].title
+                    found = true
+                }
+                i = i + 1
+            }
+            if found {
+                .LoadCurrent()
+            }
+        }
+        .ToggleArchived -> {
+            .show_archived = !.show_archived
+            if .show_archived {
+                .toggle_label = "▾"
+            } else {
+                .toggle_label = "▸"
+            }
+        }
+        .LoadCurrent -> {
+            if .current_id == "" {
+                return
+            }
+            let r CardsResult = board_cards(.current_id)
+            .cards = r.cards
+            .meta = r.meta
+            .n_drafting = 0
+            .n_executing = 0
+            .n_done = 0
+            .n_reviewed = 0
+            .archived_recent = []
+            var i int = 0
+            while i < r.cards.len() {
+                let c Card = r.cards[i]
+                if c.column == "drafting" {
+                    .n_drafting = .n_drafting + 1
+                }
+                if c.column == "executing" {
+                    .n_executing = .n_executing + 1
+                }
+                if c.column == "execution_done" {
+                    .n_done = .n_done + 1
+                }
+                if c.column == "reviewed" {
+                    .n_reviewed = .n_reviewed + 1
+                }
+                // 最近归档 5 张（updated_at 字符串序即日期序；容量满则
+                // 挤掉 recent 中最旧者）
+                if c.archived {
+                    if .archived_recent.len() < 5 {
+                        .archived_recent.push(c)
+                    } else {
+                        var oldest int = 0
+                        var k int = 1
+                        while k < .archived_recent.len() {
+                            if .archived_recent[k].updated_at < .archived_recent[oldest].updated_at {
+                                oldest = k
+                            }
+                            k = k + 1
+                        }
+                        if c.updated_at > .archived_recent[oldest].updated_at {
+                            .archived_recent[oldest] = c
+                        }
+                    }
+                }
+                i = i + 1
+            }
+            if .cards.len() == 0 {
+                .empty = true
+            } else {
+                .empty = false
+            }
+            .c_drafting = .n_drafting.str()
+            .c_executing = .n_executing.str()
+            .c_done = .n_done.str()
+            .c_reviewed = .n_reviewed.str()
+            .counts_label = r.meta.count_active.str() + " active / " + r.meta.count_archived.str() + " archived"
+            .archived_label = "Archived · " + r.meta.count_archived.str() + " · 最近 5 张（按 updated_at）"
+        }
+    }
+}

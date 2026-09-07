@@ -1,7 +1,8 @@
 {
   "file_hashes": {
-    "D:\\autostack\\auto-kanban\\src\\front\\pages\\board.at": 670851411093582805,
-    "D:\\autostack\\auto-kanban\\src\\front\\app.at": 13091983255700190018
+    "D:\\autostack\\auto-kanban\\src\\front\\pages\\board.at": 17188190258987864594,
+    "D:\\autostack\\auto-kanban\\src\\front\\app.at": 16466561389539055122,
+    "D:\\autostack\\auto-kanban\\src\\front\\boards_store.at": 12399103581615757762
   },
   "artifacts": {
     "D:\\autostack\\auto-kanban\\src\\front\\app.at": [
@@ -9,22 +10,23 @@
         "source_path": "D:\\autostack\\auto-kanban\\src\\front\\app.at",
         "widget_name": "App",
         "output_path": "src/App.vue",
-        "source_hash": 13091983255700190018,
-        "content_hash": 6822595069061329828,
+        "source_hash": 16466561389539055122,
+        "content_hash": 2770356061949247275,
         "backend": "vue"
       }
     ],
+    "D:\\autostack\\auto-kanban\\src\\front\\boards_store.at": [],
     "D:\\autostack\\auto-kanban\\src\\front\\pages\\board.at": [
       {
         "source_path": "D:\\autostack\\auto-kanban\\src\\front\\pages\\board.at",
         "widget_name": "board",
         "output_path": "src/pages/board.vue",
-        "source_hash": 670851411093582805,
-        "content_hash": 16397557582433169172,
+        "source_hash": 17188190258987864594,
+        "content_hash": 14100198864856893267,
         "backend": "vue"
       }
     ]
   },
   "version": 1,
-  "api_functions_hash": 2890574846610102469
+  "api_functions_hash": 12603145667149208881
 }
