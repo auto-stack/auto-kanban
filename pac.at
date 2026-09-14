@@ -14,5 +14,6 @@ description: "AutoOS kanban — config-driven read-only boards (v1: lang-plans)"
 scene: "ui"
 render: "vue"
 title: "Kanban"
+title_zh: "看板"
 front_port: 17100
 back_port: 17101
