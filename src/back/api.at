@@ -11,7 +11,9 @@ pub type BoardDef = {
 }
 
 /// 泛化卡片——与数据源解耦（计划板映射：id=plan_id, current/total=
-/// current_step/total_steps, column=五态之一）。
+/// current_step/total_steps, column=五态之一）。两 source 契约：全字段
+/// 必填（lang_plans 填 detail=""/priority=""/order=0 默认值，manual 填
+/// badge=""/current=0/total=0/progress="—"/archived=false/file=""）。
 pub type Card = {
     id: str
     title: str
@@ -23,6 +25,9 @@ pub type Card = {
     updated_at: str
     archived: bool
     file: str
+    detail: str              // 多行详情；lang_plans 恒 ""
+    priority: str            // P0|P1|P2（manual）；lang_plans 恒 ""
+    order: int               // 列内序（升序渲染，manual）；lang_plans 恒 0
 }
 
 /// 扫描元信息。source_root 为错误串时前端显示空态引导。

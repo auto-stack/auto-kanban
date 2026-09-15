@@ -174,7 +174,7 @@ pub fn scan(root_env str) CardsResult {
             if fm.total_steps > 0 {
                 prog = fm.current_step.str() + "/" + fm.total_steps.str()
             }
-            let card = Card { id: cid, title: title, column: column, badge: badge, current: fm.current_step, total: fm.total_steps, progress: prog, updated_at: fm.updated_at, archived: is_archived, file: fname }
+            let card = Card { id: cid, title: title, column: column, badge: badge, current: fm.current_step, total: fm.total_steps, progress: prog, updated_at: fm.updated_at, archived: is_archived, file: fname, detail: "", priority: "", order: 0 }
             cards.push(card)
             if is_archived {
                 count_archived = count_archived + 1
