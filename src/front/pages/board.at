@@ -1,13 +1,20 @@
 // pages/board.at — 按当前板 kind 条件渲染（PLAN-021 双模式）：
 //   lang_plans → 只读四列 + archived 折叠（Plan 579 交付，原样保留）
-//   manual     → ManualBoard 手动三列板（pages/manual_board.at）
+//   manual     → 手动三列板（本文件内联视图；iced 路由页跨文件组件
+//                调用不渲染——实测 2026-09-15，故不拆 ManualBoard 组件）
 // Reads cards from the shared store, filters by column (cf. 022 board page).
 // 模板只读预计算字段（VM view 不能调函数，Plan 402 约束）——progress 为
 // 后端预格式 "3/7"/"—"，列计数/折叠标签为 store 预格式。
 use store: BoardsStore
 
+style card_btn = "text-xs text-gray-400 hover:text-blue-500 w-auto px-1"
+style pri_btn = "px-3 py-1 rounded-lg text-sm border border-gray-300 text-gray-500 w-auto"
+style pri_btn_p0 = "px-3 py-1 rounded-lg text-sm border border-red-400 bg-red-50 text-red-600 font-medium w-auto"
+style pri_btn_p1 = "px-3 py-1 rounded-lg text-sm border border-orange-400 bg-orange-50 text-orange-600 font-medium w-auto"
+style pri_btn_p2 = "px-3 py-1 rounded-lg text-sm border border-gray-400 bg-gray-100 text-gray-700 font-medium w-auto"
+
 widget board {
-    msg { Init, ToggleArchived }
+    msg { Init, ToggleArchived, TitleChanged, AddClick, CardClick(str), CloseEditor, SaveEditor, EditTitle(str), EditDetail(str), SetPriority(str), AskRemove(str), RemoveCard(str), MoveLeft(str, str), MoveRight(str, str), Shift(str, int), Drag(str), AllowDrop, DropCol(str) }
 
     view {
         col {
@@ -172,7 +179,243 @@ widget board {
             }
             }
             if .store.current_kind == "manual" {
-                ManualBoard()
+                // 快速添加行（新卡默认进「待办」列）
+                row {
+                    style: "gap-2 items-center"
+                    input {
+                        placeholder: "输入卡片标题…",
+                        value: .new_title,
+                        oninput: .TitleChanged,
+                        style: "px-3 py-2 border border-gray-300 rounded-lg text-sm w-72"
+                    }
+                    button "＋ 添加" {
+                        onclick: .AddClick,
+                        style: "px-4 py-2 bg-blue-500 text-white rounded-lg text-sm hover:bg-blue-600 w-auto"
+                    }
+                }
+                // 整板空态（引导添加——manual 空非错误空态）
+                if .store.manual_empty {
+                    col {
+                        style: "p-8 items-center gap-2 bg-white rounded-xl border border-gray-200"
+                        text "看板还是空的" { style: "text-lg font-semibold text-gray-600" }
+                        text "点击上方添加第一张卡片" { style: "text-sm text-gray-400" }
+                    }
+                }
+                // 三列
+                row {
+                    style: "w-full gap-4 items-start"
+                    // 待办 todo
+                    col {
+                        style: "w-80 bg-blue-50 rounded-xl flex-shrink-0 p-3 gap-2"
+                        ondragover.prevent: .AllowDrop
+                        ondrop: .DropCol("todo")
+                        row {
+                            style: "items-center justify-between px-1 py-2"
+                            text "待办" { style: "text-sm font-semibold text-blue-700" }
+                            text .store.c_todo { style: "text-xs text-gray-400 bg-white rounded-full px-2 py-0.5" }
+                        }
+                        col {
+                            style: "gap-2"
+                            for card in .store.cards {
+                                if card.column == "todo" {
+                                    col {
+                                        key: card.id
+                                        draggable: true
+                                        ondragstart: .Drag(card.id)
+                                        style: "w-full bg-white rounded-lg px-3 py-2 shadow-sm gap-1"
+                                        row {
+                                            onclick: .CardClick(card.id),
+                                            style: "items-center gap-2 cursor-pointer"
+                                            if card.priority == "P0" {
+                                                text "P0" { style: "text-[10px] text-red-600 bg-red-50 rounded px-1.5 py-0.5 font-medium" }
+                                            }
+                                            if card.priority == "P1" {
+                                                text "P1" { style: "text-[10px] text-orange-600 bg-orange-50 rounded px-1.5 py-0.5 font-medium" }
+                                            }
+                                            if card.priority == "P2" {
+                                                text "P2" { style: "text-[10px] text-gray-500 bg-gray-100 rounded px-1.5 py-0.5" }
+                                            }
+                                            text card.title { style: "text-sm font-medium text-gray-800 truncate flex-1" }
+                                            text card.updated_at { style: "text-[10px] text-gray-400" }
+                                        }
+                                        row {
+                                            style: "items-center gap-1"
+                                            button "◀" { onclick: .MoveLeft(card.id, card.column), style: card_btn }
+                                            button "▶" { onclick: .MoveRight(card.id, card.column), style: card_btn }
+                                            button "▲" { onclick: .Shift(card.id, -1), style: card_btn }
+                                            button "▼" { onclick: .Shift(card.id, 1), style: card_btn }
+                                            if .store.confirm_delete_id == card.id {
+                                                button "确认" { onclick: .RemoveCard(card.id), style: "text-xs text-white bg-red-500 hover:bg-red-600 rounded px-2 py-0.5 w-auto" }
+                                            } else {
+                                                button "×" { onclick: .AskRemove(card.id), style: "text-xs text-gray-300 hover:text-red-500 w-auto px-1" }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    // 进行中 doing
+                    col {
+                        style: "w-80 bg-orange-50 rounded-xl flex-shrink-0 p-3 gap-2"
+                        ondragover.prevent: .AllowDrop
+                        ondrop: .DropCol("doing")
+                        row {
+                            style: "items-center justify-between px-1 py-2"
+                            text "进行中" { style: "text-sm font-semibold text-orange-600" }
+                            text .store.c_doing { style: "text-xs text-gray-400 bg-white rounded-full px-2 py-0.5" }
+                        }
+                        col {
+                            style: "gap-2"
+                            for card in .store.cards {
+                                if card.column == "doing" {
+                                    col {
+                                        key: card.id
+                                        draggable: true
+                                        ondragstart: .Drag(card.id)
+                                        style: "w-full bg-white rounded-lg px-3 py-2 shadow-sm gap-1"
+                                        row {
+                                            onclick: .CardClick(card.id),
+                                            style: "items-center gap-2 cursor-pointer"
+                                            if card.priority == "P0" {
+                                                text "P0" { style: "text-[10px] text-red-600 bg-red-50 rounded px-1.5 py-0.5 font-medium" }
+                                            }
+                                            if card.priority == "P1" {
+                                                text "P1" { style: "text-[10px] text-orange-600 bg-orange-50 rounded px-1.5 py-0.5 font-medium" }
+                                            }
+                                            if card.priority == "P2" {
+                                                text "P2" { style: "text-[10px] text-gray-500 bg-gray-100 rounded px-1.5 py-0.5" }
+                                            }
+                                            text card.title { style: "text-sm font-medium text-gray-800 truncate flex-1" }
+                                            text card.updated_at { style: "text-[10px] text-gray-400" }
+                                        }
+                                        row {
+                                            style: "items-center gap-1"
+                                            button "◀" { onclick: .MoveLeft(card.id, card.column), style: card_btn }
+                                            button "▶" { onclick: .MoveRight(card.id, card.column), style: card_btn }
+                                            button "▲" { onclick: .Shift(card.id, -1), style: card_btn }
+                                            button "▼" { onclick: .Shift(card.id, 1), style: card_btn }
+                                            if .store.confirm_delete_id == card.id {
+                                                button "确认" { onclick: .RemoveCard(card.id), style: "text-xs text-white bg-red-500 hover:bg-red-600 rounded px-2 py-0.5 w-auto" }
+                                            } else {
+                                                button "×" { onclick: .AskRemove(card.id), style: "text-xs text-gray-300 hover:text-red-500 w-auto px-1" }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    // 完成 done
+                    col {
+                        style: "w-80 bg-green-50 rounded-xl flex-shrink-0 p-3 gap-2"
+                        ondragover.prevent: .AllowDrop
+                        ondrop: .DropCol("done")
+                        row {
+                            style: "items-center justify-between px-1 py-2"
+                            text "完成" { style: "text-sm font-semibold text-green-600" }
+                            text .store.c_done_m { style: "text-xs text-gray-400 bg-white rounded-full px-2 py-0.5" }
+                        }
+                        col {
+                            style: "gap-2"
+                            for card in .store.cards {
+                                if card.column == "done" {
+                                    col {
+                                        key: card.id
+                                        draggable: true
+                                        ondragstart: .Drag(card.id)
+                                        style: "w-full bg-white rounded-lg px-3 py-2 shadow-sm gap-1"
+                                        row {
+                                            onclick: .CardClick(card.id),
+                                            style: "items-center gap-2 cursor-pointer"
+                                            if card.priority == "P0" {
+                                                text "P0" { style: "text-[10px] text-red-600 bg-red-50 rounded px-1.5 py-0.5 font-medium" }
+                                            }
+                                            if card.priority == "P1" {
+                                                text "P1" { style: "text-[10px] text-orange-600 bg-orange-50 rounded px-1.5 py-0.5 font-medium" }
+                                            }
+                                            if card.priority == "P2" {
+                                                text "P2" { style: "text-[10px] text-gray-500 bg-gray-100 rounded px-1.5 py-0.5" }
+                                            }
+                                            text card.title { style: "text-sm font-medium text-gray-800 truncate flex-1" }
+                                            text card.updated_at { style: "text-[10px] text-gray-400" }
+                                        }
+                                        row {
+                                            style: "items-center gap-1"
+                                            button "◀" { onclick: .MoveLeft(card.id, card.column), style: card_btn }
+                                            button "▶" { onclick: .MoveRight(card.id, card.column), style: card_btn }
+                                            button "▲" { onclick: .Shift(card.id, -1), style: card_btn }
+                                            button "▼" { onclick: .Shift(card.id, 1), style: card_btn }
+                                            if .store.confirm_delete_id == card.id {
+                                                button "确认" { onclick: .RemoveCard(card.id), style: "text-xs text-white bg-red-500 hover:bg-red-600 rounded px-2 py-0.5 w-auto" }
+                                            } else {
+                                                button "×" { onclick: .AskRemove(card.id), style: "text-xs text-gray-300 hover:text-red-500 w-auto px-1" }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                // 编辑面板（板下方条件渲染；点卡片展开）
+                if .store.editing_id != "" {
+                    col {
+                        style: "bg-white rounded-xl border border-gray-200 p-4 gap-3"
+                        row {
+                            style: "items-center gap-2"
+                            text "编辑卡片" { style: "text-sm font-semibold text-gray-700" }
+                            text .store.editing_id { style: "text-xs font-mono text-blue-600 bg-blue-50 rounded px-1.5 py-0.5" }
+                        }
+                        row {
+                            style: "items-center gap-2"
+                            text "标题" { style: "text-sm text-gray-500 w-auto" }
+                            input {
+                                value: .store.edit_title,
+                                oninput: .EditTitle,
+                                placeholder: "卡片标题…",
+                                style: "flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                            }
+                        }
+                        row {
+                            style: "items-center gap-2"
+                            text "优先级" { style: "text-sm text-gray-500 w-auto" }
+                            button "P0 紧急" {
+                                onclick: .SetPriority("P0"),
+                                style: if .store.edit_priority == "P0" { pri_btn_p0 } else { pri_btn }
+                            }
+                            button "P1 高" {
+                                onclick: .SetPriority("P1"),
+                                style: if .store.edit_priority == "P1" { pri_btn_p1 } else { pri_btn }
+                            }
+                            button "P2 普通" {
+                                onclick: .SetPriority("P2"),
+                                style: if .store.edit_priority == "P2" { pri_btn_p2 } else { pri_btn }
+                            }
+                        }
+                        col {
+                            style: "gap-1"
+                            text "详情" { style: "text-sm text-gray-500" }
+                            textarea {
+                                value: .store.edit_detail,
+                                oninput: .EditDetail,
+                                placeholder: "多行详情…",
+                                style: "w-full px-3 py-2 border border-gray-300 rounded-lg text-sm min-h-20"
+                            }
+                        }
+                        row {
+                            style: "items-center gap-2"
+                            button "保存" {
+                                onclick: .SaveEditor,
+                                style: "px-4 py-2 bg-blue-500 text-white rounded-lg text-sm hover:bg-blue-600 w-auto"
+                            }
+                            button "取消" {
+                                onclick: .CloseEditor,
+                                style: "px-4 py-2 bg-gray-100 text-gray-600 rounded-lg text-sm hover:bg-gray-200 w-auto"
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -181,6 +424,8 @@ widget board {
         // 折叠区本地显隐与标签（数据在 store；标签本地——视图不能调函数）
         var show_archived bool = false
         var toggle_label str = "▸"
+        // 快速添加行输入缓冲（022 board.at 同型；值绑定自动回写）
+        var new_title str = ""
     }
 
     on {
@@ -193,5 +438,43 @@ widget board {
                 .toggle_label = "▸"
             }
         }
+        .Init -> { }
+        .AddClick -> {
+            if .new_title != "" {
+                store.AddCard(.new_title)
+                .new_title = ""
+            }
+        }
+        .CardClick(cid str) -> {
+            // 编辑面板打开时点其他卡切换目标（含删除确认切换的对称语义）
+            store.OpenEditor(cid)
+        }
+        .CloseEditor -> { store.CloseEditor() }
+        .SaveEditor -> { store.SaveEditor() }
+        .EditTitle(v str) -> { store.EditTitle(v) }
+        .EditDetail(v str) -> { store.EditDetail(v) }
+        .SetPriority(p str) -> { store.SetPriority(p) }
+        .AskRemove(cid str) -> { store.AskRemove(cid) }
+        .RemoveCard(cid str) -> { store.RemoveCard(cid) }
+        .MoveLeft(cid str, col str) -> {
+            if col == "doing" {
+                store.MoveCard(cid, "todo")
+            }
+            if col == "done" {
+                store.MoveCard(cid, "doing")
+            }
+        }
+        .MoveRight(cid str, col str) -> {
+            if col == "todo" {
+                store.MoveCard(cid, "doing")
+            }
+            if col == "doing" {
+                store.MoveCard(cid, "done")
+            }
+        }
+        .Shift(cid str, d int) -> { store.ShiftCard(cid, d) }
+        .Drag(cid str) -> { store.DragCard(cid) }
+        .AllowDrop -> { }
+        .DropCol(col str) -> { store.DropCol(col) }
     }
 }
