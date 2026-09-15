@@ -1,0 +1,410 @@
+// manual_store.at — 第二个看板类型适配器（kind = "manual"，PLAN-021）。
+//
+// 无状态文件后端：每请求读数据文件，每次变更全量重写（与 lang_plans
+// "每请求全量重扫"同构；重启天然安全，测试换文件即换库）。全部函数
+// 局部量进、构造结果出——后端模块级 `.field = []` / 局部 []T 赋回状态
+// 字段会 Assignment to complex LHS panic（Plan 579 实测），022 db.at
+// 重建模式同型规避。
+//
+// 读取：json.parse + 动态导航（boards_registry.at:41 先例）；int 字段经
+// json.as_int（VM native 1912，codegen json.as_int 映射）；str 字段经
+// ""+val 物化（lang_plans 探针 a6a/mat 定案）。
+// 写入：手工 JSON 序列化（json.decode[T] 泛型实例化 VM codegen 不支持
+// ——codegen.rs:9713，Plan 579 T8 探针定案），str 字段全过 json_escape。
+//
+// 数据文件路径解析序：Env.get("AUTO_KANBAN_DATA") 覆盖 → 默认
+// "data/manual.json"（相对运行 CWD，与 boards.json 同基准）。
+
+use api: Card, Meta, CardsResult
+use auto.file
+use auto.fs
+use auto.env
+use auto.json
+use auto.time
+
+/// 数据文件路径：env 覆盖 → 默认（沿 AUTO_KANBAN_BOARDS 先例）。
+fn data_path() str {
+    let p str = env.get("AUTO_KANBAN_DATA")
+    if p != "" {
+        return p
+    }
+    return "data/manual.json"
+}
+
+/// JSON 字符串转义（顺序敏感：先反斜杠，再引号，再控制字符）。
+fn json_escape(s str) str {
+    var out str = s
+    out = out.replace("\\", "\\\\")
+    out = out.replace("\"", "\\\"")
+    out = out.replace("\n", "\\n")
+    out = out.replace("\t", "\\t")
+    out = out.replace("\r", "\\r")
+    return out
+}
+
+/// 单卡序列化为 JSON 对象文本（文件 schema 见 §5.2：七字段）。
+fn card_to_json(c Card) str {
+    var out str = "{\"id\":\""
+    out = out + json_escape(c.id)
+    out = out + "\",\"title\":\""
+    out = out + json_escape(c.title)
+    out = out + "\",\"detail\":\""
+    out = out + json_escape(c.detail)
+    out = out + "\",\"column\":\""
+    out = out + json_escape(c.column)
+    out = out + "\",\"priority\":\""
+    out = out + json_escape(c.priority)
+    out = out + "\",\"order\":"
+    let o int = c.order
+    out = out + o.str()
+    out = out + ",\"updated_at\":\""
+    out = out + json_escape(c.updated_at)
+    out = out + "\"}"
+    return out
+}
+
+/// 全量重写数据文件（先 create_dir("data") 兜底默认路径首创建；
+/// env 覆盖路径的目录由使用方保证存在）。
+fn save(cards []Card) int {
+    fs.create_dir("data")
+    var out str = "{\"cards\":["
+    var i int = 0
+    while i < cards.len() {
+        if i > 0 {
+            out = out + ","
+        }
+        out = out + card_to_json(cards[i])
+        i = i + 1
+    }
+    out = out + "]}"
+    return file.write_text(data_path(), out)
+}
+
+/// 列权重：todo=0 < doing=1 < done=2；未知列排最后。
+fn col_weight(col str) int {
+    if col == "todo" {
+        return 0
+    }
+    if col == "doing" {
+        return 1
+    }
+    if col == "done" {
+        return 2
+    }
+    return 3
+}
+
+/// 双键稳定排序（列权重升序，列内 order 升序；同键保持原相对序——
+/// 插入排序重建法，全程 push 不做下标赋值，小语料 O(n²) 可接受）。
+fn resort(cards []Card) []Card {
+    var result []Card = []
+    var i int = 0
+    while i < cards.len() {
+        let c Card = cards[i]
+        let w int = col_weight(c.column)
+        // 找 result 中第一个 (权重, order) 严格大于 c 的位置
+        var pos int = result.len()
+        var j int = 0
+        var placed bool = false
+        while j < result.len() {
+            if !placed {
+                let r Card = result[j]
+                let rw int = col_weight(r.column)
+                if rw > w {
+                    pos = j
+                    placed = true
+                }
+                if rw == w && r.order > c.order {
+                    pos = j
+                    placed = true
+                }
+            }
+            j = j + 1
+        }
+        // 重建 result = result[0..pos] + c + result[pos..]
+        var next []Card = []
+        var k int = 0
+        while k < result.len() {
+            if k == pos {
+                next.push(c)
+            }
+            next.push(result[k])
+            k = k + 1
+        }
+        if !placed {
+            next.push(c)
+        }
+        result = next
+        i = i + 1
+    }
+    return result
+}
+
+/// 读文件 → []Card（缺失/损坏 → 空数组，空态不算错误）。
+fn load_cards_only() []Card {
+    var cards []Card = []
+    let path str = data_path()
+    if !file.exists(path) {
+        return cards
+    }
+    let text str = file.read_text(path)
+    let parsed = json.parse(text)
+    if parsed == nil {
+        return cards
+    }
+    let entries = parsed.cards
+    if entries == nil {
+        return cards
+    }
+    for entry in entries {
+        let cid str = "" + entry.id
+        let ctitle str = "" + entry.title
+        let cdetail str = "" + entry.detail
+        let ccol str = "" + entry.column
+        let cpri str = "" + entry.priority
+        let cupd str = "" + entry.updated_at
+        let corder int = json.as_int(entry.order)
+        let card = Card { id: cid, title: ctitle, column: ccol, badge: "", current: 0, total: 0, progress: "—", updated_at: cupd, archived: false, file: "", detail: cdetail, priority: cpri, order: corder }
+        cards.push(card)
+    }
+    return cards
+}
+
+/// id 位置查找（未命中 -1；单趟扫描不提前 return，规避 VM 早退风险）。
+fn find_index(cards []Card, cid str) int {
+    var found int = -1
+    var i int = 0
+    while i < cards.len() {
+        if found < 0 {
+            if cards[i].id == cid {
+                found = i
+            }
+        }
+        i = i + 1
+    }
+    return found
+}
+
+/// 零值卡（未命中返回值；id="" 供诊断区分）。
+fn zero_card() Card {
+    let z = Card { id: "", title: "", column: "", badge: "", current: 0, total: 0, progress: "—", updated_at: "", archived: false, file: "", detail: "", priority: "", order: 0 }
+    return z
+}
+
+/// id 分配："m" + max(现存数字后缀) + 1（文件不存计数器；删除最大 id
+/// 后复用可接受——本文件内主键无外部引用，PLAN-021 §5.2 定案）。
+/// m 前缀为 VM HTTP 约束适配：build_handler_args 对可解析为 i32 的
+/// 路径参数按值推 int（与 str 形参错位 → cid 变空），前缀强制走 str 通道。
+fn next_id(cards []Card) str {
+    var mx int = 0
+    for c in cards {
+        var raw str = c.id
+        if raw.starts_with("m") {
+            raw = raw.sub(1, raw.len())
+        }
+        let v int = raw.to_int()
+        if v > mx {
+            mx = v
+        }
+    }
+    let n int = mx + 1
+    return "m" + n.str()
+}
+
+/// 列名白名单：非 doing/done 一律落 todo。
+fn norm_column(col str) str {
+    if col == "doing" {
+        return col
+    }
+    if col == "done" {
+        return col
+    }
+    return "todo"
+}
+
+/// 全列压紧：输入按 resort 规范序（列分组 + order 升序，列内连续），
+/// 逐列重编号 0..n-1（防长期交换后 order 稀疏膨胀）。
+fn renumber_columns(cards []Card) []Card {
+    var result []Card = []
+    var last_col str = ""
+    var w int = 0
+    for c in cards {
+        let col str = c.column
+        if col != last_col {
+            last_col = col
+            w = 0
+        }
+        let q = Card { id: c.id, title: c.title, column: c.column, badge: "", current: 0, total: 0, progress: "—", updated_at: c.updated_at, archived: false, file: "", detail: c.detail, priority: c.priority, order: w }
+        result.push(q)
+        w = w + 1
+    }
+    return result
+}
+
+/// GET 数据源：读 + 解析 + 排序（列序 todo<doing<done，列内 order 升序）。
+pub fn load() CardsResult {
+    let cards []Card = resort(load_cards_only())
+    let dp str = data_path()
+    let now str = time.now()
+    let n int = cards.len()
+    let m = Meta { source_root: dp, scanned_at: now, count_active: n, count_archived: 0 }
+    let r = CardsResult { cards: cards, meta: m }
+    return r
+}
+
+/// 创建卡片：目标列尾部（order=该列现卡数），P2 默认，落盘后返回。
+/// 空标题拒创建（落零卡不落盘——前端本就拦空，AC-02）。
+pub fn create(title str, column str) Card {
+    if title == "" {
+        return zero_card()
+    }
+    var cards []Card = load_cards_only()
+    let nid str = next_id(cards)
+    let col str = norm_column(column)
+    let now str = time.now()
+    var tail int = 0
+    for c in cards {
+        if c.column == col {
+            tail = tail + 1
+        }
+    }
+    let card = Card { id: nid, title: title, column: col, badge: "", current: 0, total: 0, progress: "—", updated_at: now, archived: false, file: "", detail: "", priority: "P2", order: tail }
+    cards.push(card)
+    save(cards)
+    return card
+}
+
+/// 编辑三字段（标题/详情/优先级），updated_at 刷新，列与序不变。
+pub fn update(id str, title str, detail str, priority str) Card {
+    var cards []Card = load_cards_only()
+    let idx int = find_index(cards, id)
+    var result Card = zero_card()
+    if idx >= 0 {
+        var next []Card = []
+        var i int = 0
+        while i < cards.len() {
+            if i == idx {
+                let src Card = cards[i]
+                let now str = time.now()
+                let upd = Card { id: src.id, title: title, column: src.column, badge: "", current: 0, total: 0, progress: "—", updated_at: now, archived: false, file: "", detail: detail, priority: priority, order: src.order }
+                next.push(upd)
+                result = upd
+            } else {
+                next.push(cards[i])
+            }
+            i = i + 1
+        }
+        save(next)
+    }
+    return result
+}
+
+/// 移动 + 排序合一（"目标位插入"定案，PLAN-021 §5.6）：目标列按
+/// order 升序的用户可见序列中第 pos 位插入，落位后该列压紧重编号
+/// 0..n-1；其余列同样压紧（全列重编号，防 order 稀疏膨胀）。pos 越界
+/// 钳到 [0, 列卡数]。同列相邻交换 = 一次调用（插入语义天然完成交换，
+/// ▲▼ 直接给邻卡 order）。存盘顺序 = resort 后的规范序（列分组 +
+/// order 升序）。
+pub fn move_card(id str, column str, order int) Card {
+    var cards []Card = load_cards_only()
+    let idx int = find_index(cards, id)
+    var result Card = zero_card()
+    if idx >= 0 {
+        let col str = norm_column(column)
+        let src Card = cards[idx]
+        // 1) 移除自身
+        var rest []Card = []
+        var i int = 0
+        while i < cards.len() {
+            if i != idx {
+                rest.push(cards[i])
+            }
+            i = i + 1
+        }
+        // 2) 目标列剩余卡（文件序）→ resort 稳定排序成用户可见序
+        //    （同列权重相等，退化为 order 升序稳定排序）
+        var colcards []Card = []
+        var j int = 0
+        while j < rest.len() {
+            if rest[j].column == col {
+                colcards.push(rest[j])
+            }
+            j = j + 1
+        }
+        let sorted_col []Card = resort(colcards)
+        // 3) 插入位钳制
+        var pos int = order
+        if pos < 0 {
+            pos = 0
+        }
+        if pos > sorted_col.len() {
+            pos = sorted_col.len()
+        }
+        // 4) 构建目标列新序列：插入点前落自身（updated_at 刷新），
+        //    全列重编号 0..n-1
+        var newcol []Card = []
+        var k int = 0
+        var placed bool = false
+        while k < sorted_col.len() {
+            if k == pos {
+                let now str = time.now()
+                let p = Card { id: src.id, title: src.title, column: col, badge: "", current: 0, total: 0, progress: "—", updated_at: now, archived: false, file: "", detail: src.detail, priority: src.priority, order: k }
+                newcol.push(p)
+                result = p
+                placed = true
+            }
+            let r Card = sorted_col[k]
+            let q = Card { id: r.id, title: r.title, column: r.column, badge: "", current: 0, total: 0, progress: "—", updated_at: r.updated_at, archived: false, file: "", detail: r.detail, priority: r.priority, order: k }
+            newcol.push(q)
+            k = k + 1
+        }
+        if !placed {
+            let now2 str = time.now()
+            let p2 = Card { id: src.id, title: src.title, column: col, badge: "", current: 0, total: 0, progress: "—", updated_at: now2, archived: false, file: "", detail: src.detail, priority: src.priority, order: k }
+            newcol.push(p2)
+            result = p2
+        }
+        // 5) 拼回：非目标列（文件序）+ 目标列新序列，再 resort + 全列
+        //    压紧重编号（源列间隙清零），存盘规范序
+        var out []Card = []
+        var m int = 0
+        while m < rest.len() {
+            if rest[m].column != col {
+                out.push(rest[m])
+            }
+            m = m + 1
+        }
+        var t int = 0
+        while t < newcol.len() {
+            out.push(newcol[t])
+            t = t + 1
+        }
+        let grouped []Card = resort(out)
+        let compacted []Card = renumber_columns(grouped)
+        save(compacted)
+    }
+    return result
+}
+
+/// 删除卡片（未命中 false，不落盘）。删除后全列压紧重编号（防删卡
+/// 留 order 间隙），存盘规范序。
+pub fn remove(id str) bool {
+    var cards []Card = load_cards_only()
+    let idx int = find_index(cards, id)
+    var ok bool = false
+    if idx >= 0 {
+        var next []Card = []
+        var i int = 0
+        while i < cards.len() {
+            if i != idx {
+                next.push(cards[i])
+            }
+            i = i + 1
+        }
+        let grouped []Card = resort(next)
+        let compacted []Card = renumber_columns(grouped)
+        save(compacted)
+        ok = true
+    }
+    return ok
+}

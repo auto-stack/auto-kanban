@@ -46,6 +46,11 @@ pub type CardsResult = {
 
 use boards_registry
 
+/// VM HTTP 后端约定（http_server.rs build_handler_args，Plan 346 位置
+/// 参数制）：路径参数按声明序绑定，请求体作为**单个原始 JSON 字符串**
+/// 追加到末位——字段解包在 boards_registry（body_json 解包臂；本文件
+/// 是后端编译入口，Plan 550 门 E5501 禁 nil 字面量，故不在此解析）。
+
 /// GET /api/boards — 看板列表（读 boards.json）。函数名避开 store 字段名
 /// （list_boards/board_cards vs .boards/.cards，022 导入无撞名先例）。
 #[api(method = "GET", path = "/api/boards")]
@@ -57,4 +62,29 @@ pub fn list_boards() []BoardDef {
 #[api(method = "GET", path = "/api/boards/:id/cards")]
 pub fn board_cards(id str) CardsResult {
     return boards_registry.load_cards(id)
+}
+
+/// POST /api/boards/:id/cards — 手动板建卡（经 registry 按 kind 分发；
+/// 非 manual 板落零卡，前端以重拉 cards 为准，响应值仅诊断用）。
+#[api(method = "POST", path = "/api/boards/:id/cards")]
+pub fn create_card(id str, body str) Card {
+    return boards_registry.create_card(id, body)
+}
+
+/// PUT /api/boards/:id/cards/:cid — 手动板编辑（标题/详情/优先级）。
+#[api(method = "PUT", path = "/api/boards/:id/cards/:cid")]
+pub fn update_card(id str, cid str, body str) Card {
+    return boards_registry.update_card(id, cid, body)
+}
+
+/// PUT /api/boards/:id/cards/:cid/move — 手动板移动+排序（目标位插入）。
+#[api(method = "PUT", path = "/api/boards/:id/cards/:cid/move")]
+pub fn move_card(id str, cid str, body str) Card {
+    return boards_registry.move_card(id, cid, body)
+}
+
+/// DELETE /api/boards/:id/cards/:cid — 手动板删卡（无 body）。
+#[api(method = "DELETE", path = "/api/boards/:id/cards/:cid")]
+pub fn delete_card(id str, cid str) bool {
+    return boards_registry.delete_card(id, cid)
 }

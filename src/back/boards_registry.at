@@ -16,6 +16,7 @@
 
 use api: BoardDef, Card, Meta, CardsResult
 use lang_plans
+use manual_store
 use auto.file
 use auto.env
 use auto.json
@@ -67,6 +68,104 @@ fn error_result(msg str) CardsResult {
     return result
 }
 
+/// 零值卡（写端点非法板门返回值；id="" 供诊断区分）。
+fn zero_card_def() Card {
+    let z = Card { id: "", title: "", column: "", badge: "", current: 0, total: 0, progress: "—", updated_at: "", archived: false, file: "", detail: "", priority: "", order: 0 }
+    return z
+}
+
+/// body JSON 的 str 字段解包（解析失败/缺字段 → ""）。VM HTTP 后端把
+/// 请求体作为单个原始字符串推给 handler（Plan 346 位置参数制），解包
+/// 在本模块做——api.at 是后端编译入口，Plan 550 门 E5501 禁 nil 字面量。
+/// 注意取值必须走 json.as_string：""+JsonValue 拼接得 JSON 编码形态
+/// （带引号，2026-09-15 实测），非原始内容。
+fn body_str(body str, key str) str {
+    var out str = ""
+    let parsed = json.parse(body)
+    if parsed == nil {
+        return out
+    }
+    let v = json.get(parsed, key)
+    if v == nil {
+        return out
+    }
+    out = json.as_string(v)
+    return out
+}
+
+/// body JSON 的 int 字段解包（解析失败/缺字段 → 0）。
+fn body_int(body str, key str) int {
+    var out int = 0
+    let parsed = json.parse(body)
+    if parsed == nil {
+        return out
+    }
+    let v = json.get(parsed, key)
+    if v == nil {
+        return out
+    }
+    out = json.as_int(v)
+    return out
+}
+
+/// 写端点 kind 门：板存在且 kind == "manual" 才允许写（lang_plans 源
+/// 禁写——Plan 579 边界延续；未知板同拒）。
+pub fn is_manual(id str) bool {
+    let defs = load_boards()
+    var ok bool = false
+    for b in defs {
+        if b.id == id {
+            if b.kind == "manual" {
+                ok = true
+            }
+        }
+    }
+    return ok
+}
+
+/// 写分发（沿读路径 seam）：POST 建卡（body: title/column）。
+pub fn create_card(id str, body str) Card {
+    var result Card = zero_card_def()
+    if is_manual(id) {
+        let title str = body_str(body, "title")
+        let column str = body_str(body, "column")
+        result = manual_store.create(title, column)
+    }
+    return result
+}
+
+/// 写分发：PUT 编辑三字段（body: title/detail/priority）。
+pub fn update_card(id str, cid str, body str) Card {
+    var result Card = zero_card_def()
+    if is_manual(id) {
+        let title str = body_str(body, "title")
+        let detail str = body_str(body, "detail")
+        let priority str = body_str(body, "priority")
+        result = manual_store.update(cid, title, detail, priority)
+    }
+    return result
+}
+
+/// 写分发：PUT 移动+排序（body: column/order，目标位插入）。
+pub fn move_card(id str, cid str, body str) Card {
+    var result Card = zero_card_def()
+    if is_manual(id) {
+        let column str = body_str(body, "column")
+        let order int = body_int(body, "order")
+        result = manual_store.move_card(cid, column, order)
+    }
+    return result
+}
+
+/// 写分发：DELETE 删卡（非 manual 板 false）。
+pub fn delete_card(id str, cid str) bool {
+    var ok bool = false
+    if is_manual(id) {
+        ok = manual_store.remove(cid)
+    }
+    return ok
+}
+
 /// kind 分发：按 id 找 BoardDef，按 kind 调对应适配器。
 pub fn load_cards(id str) CardsResult {
     let defs = load_boards()
@@ -84,6 +183,9 @@ pub fn load_cards(id str) CardsResult {
     }
     if target.kind == "lang_plans" {
         return lang_plans.scan(target.root_env)
+    }
+    if target.kind == "manual" {
+        return manual_store.load()
     }
     return error_result("unknown board kind: " + target.kind)
 }
