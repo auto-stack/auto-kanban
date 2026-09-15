@@ -3,7 +3,7 @@
 //
 // 计数字段/最近归档在 handler 内预计算——VM view 不能调函数（Plan 402
 // 约束），模板只读字段。handler 间互调沿 041/038/013 先例（.LoadCurrent()）。
-use back.api: list_boards, board_cards, create_card, update_card, delete_card, update_card, move_card, delete_card
+use back.api: list_boards, board_cards, create_card, update_card, move_card, delete_card, update_card, move_card, delete_card
 
 /// 写端点 body JSON 串构造用转义（语义同后端 manual_store.json_escape：
 /// 先反斜杠后引号再控制字符；VM 位置参数制下写端点第二形参为整条原始
@@ -50,6 +50,10 @@ store BoardsStore {
         var edit_title str = ""
         var edit_detail str = ""
         var edit_priority str = ""
+        // 两击删除：当前确认目标（""=无；点其他卡 × 换目标）
+        var confirm_delete_id str = ""
+        // Vue 拖拽增强通道：被拖卡 id（022 drag_id 同型）
+        var drag_id str = ""
         var archived_label str = ""
         // archived 折叠区
         var show_archived bool = false
@@ -59,7 +63,7 @@ store BoardsStore {
         var counts_label str = ""
     }
 
-    msg { Init, Refresh, SelectBoard(str), ToggleArchived, LoadCurrent, AddCard(str), OpenEditor(str), CloseEditor, SaveEditor, EditTitle(str), EditDetail(str), SetPriority(str) }
+    msg { Init, Refresh, SelectBoard(str), ToggleArchived, LoadCurrent, AddCard(str), OpenEditor(str), CloseEditor, SaveEditor, EditTitle(str), EditDetail(str), SetPriority(str), AskRemove(str), RemoveCard(str), MoveCard(str, str), ShiftCard(str, int), DragCard(str), DropCol(str) }
 
     on {
         .Init -> {
@@ -155,6 +159,78 @@ store BoardsStore {
         }
         .SetPriority(p str) -> {
             .edit_priority = p
+        }
+        .AskRemove(cid str) -> {
+            // 首击 ×：置/换确认目标（不弹窗不计时，PLAN-021 §5.6）
+            .confirm_delete_id = cid
+        }
+        .RemoveCard(cid str) -> {
+            // 再击确认：cid 相符才执行；删后清确认位重拉
+            if .confirm_delete_id == cid {
+                delete_card(.current_id, cid)
+                .confirm_delete_id = ""
+                .LoadCurrent()
+            }
+        }
+        .MoveCard(cid str, col str) -> {
+            // 落目标列尾部：order = 该列现卡数
+            if .current_kind == "manual" {
+                var tail int = 0
+                var i int = 0
+                while i < .cards.len() {
+                    if .cards[i].column == col {
+                        tail = tail + 1
+                    }
+                    i = i + 1
+                }
+                let body str = "{\"column\":\"" + col + "\",\"order\":" + tail.str() + "}"
+                move_card(.current_id, cid, body)
+                .LoadCurrent()
+            }
+        }
+        .ShiftCard(cid str, d int) -> {
+            // ▲▼：与相邻卡换位 = 目标位插入语义下给邻卡 order（一次调用）
+            if .current_kind == "manual" {
+                var col str = ""
+                var ord int = 0
+                var found bool = false
+                var i int = 0
+                while i < .cards.len() {
+                    if .cards[i].id == cid {
+                        col = .cards[i].column
+                        ord = .cards[i].order
+                        found = true
+                    }
+                    i = i + 1
+                }
+                if found {
+                    var target int = ord + d
+                    var neighbor int = -1
+                    var j int = 0
+                    while j < .cards.len() {
+                        if .cards[j].column == col {
+                            if .cards[j].order == target {
+                                neighbor = .cards[j].order
+                            }
+                        }
+                        j = j + 1
+                    }
+                    if neighbor >= 0 {
+                        let body str = "{\"column\":\"" + col + "\",\"order\":" + neighbor.str() + "}"
+                        move_card(.current_id, cid, body)
+                        .LoadCurrent()
+                    }
+                }
+            }
+        }
+        .DragCard(cid str) -> {
+            .drag_id = cid
+        }
+        .DropCol(col str) -> {
+            if .drag_id != "" {
+                .MoveCard(.drag_id, col)
+                .drag_id = ""
+            }
         }
         .LoadCurrent -> {
             if .current_id == "" {

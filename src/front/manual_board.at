@@ -15,7 +15,7 @@ style pri_btn_p1 = "px-3 py-1 rounded-lg text-sm border border-orange-400 bg-ora
 style pri_btn_p2 = "px-3 py-1 rounded-lg text-sm border border-gray-400 bg-gray-100 text-gray-700 font-medium w-auto"
 
 widget ManualBoard {
-    msg { Init, TitleChanged, AddClick, CardClick(str), CloseEditor, SaveEditor, EditTitle(str), EditDetail(str), SetPriority(str) }
+    msg { Init, TitleChanged, AddClick, CardClick(str), CloseEditor, SaveEditor, EditTitle(str), EditDetail(str), SetPriority(str), AskRemove(str), RemoveCard(str), MoveLeft(str, str), MoveRight(str, str), Shift(str, int), Drag(str), AllowDrop, DropCol(str) }
 
     model {
         // 快速添加行输入缓冲（022 board.at 同型；值绑定自动回写）
@@ -53,6 +53,8 @@ widget ManualBoard {
                 // 待办 todo
                 col {
                     style: "w-80 bg-blue-50 rounded-xl flex-shrink-0 p-3 gap-2"
+                    ondragover.prevent: .AllowDrop
+                    ondrop: .DropCol("todo")
                     row {
                         style: "items-center justify-between px-1 py-2"
                         text "待办" { style: "text-sm font-semibold text-blue-700" }
@@ -64,10 +66,12 @@ widget ManualBoard {
                             if card.column == "todo" {
                                 col {
                                     key: card.id
-                                    onclick: .CardClick(card.id),
-                                    style: "w-full bg-white rounded-lg px-3 py-2 shadow-sm gap-1 cursor-pointer"
+                                    draggable: true
+                                    ondragstart: .Drag(card.id)
+                                    style: "w-full bg-white rounded-lg px-3 py-2 shadow-sm gap-1"
                                     row {
-                                        style: "items-center gap-2"
+                                        onclick: .CardClick(card.id),
+                                        style: "items-center gap-2 cursor-pointer"
                                         if card.priority == "P0" {
                                             text "P0" { style: "text-[10px] text-red-600 bg-red-50 rounded px-1.5 py-0.5 font-medium" }
                                         }
@@ -82,11 +86,15 @@ widget ManualBoard {
                                     }
                                     row {
                                         style: "items-center gap-1"
-                                        button "◀" { style: card_btn }
-                                        button "▶" { style: card_btn }
-                                        button "▲" { style: card_btn }
-                                        button "▼" { style: card_btn }
-                                        button "×" { style: "text-xs text-gray-300 hover:text-red-500 w-auto px-1" }
+                                        button "◀" { onclick: .MoveLeft(card.id, card.column), style: card_btn }
+                                        button "▶" { onclick: .MoveRight(card.id, card.column), style: card_btn }
+                                        button "▲" { onclick: .Shift(card.id, -1), style: card_btn }
+                                        button "▼" { onclick: .Shift(card.id, 1), style: card_btn }
+                                        if .store.confirm_delete_id == card.id {
+                                            button "确认" { onclick: .RemoveCard(card.id), style: "text-xs text-white bg-red-500 hover:bg-red-600 rounded px-2 py-0.5 w-auto" }
+                                        } else {
+                                            button "×" { onclick: .AskRemove(card.id), style: "text-xs text-gray-300 hover:text-red-500 w-auto px-1" }
+                                        }
                                     }
                                 }
                             }
@@ -96,6 +104,8 @@ widget ManualBoard {
                 // 进行中 doing
                 col {
                     style: "w-80 bg-orange-50 rounded-xl flex-shrink-0 p-3 gap-2"
+                    ondragover.prevent: .AllowDrop
+                    ondrop: .DropCol("doing")
                     row {
                         style: "items-center justify-between px-1 py-2"
                         text "进行中" { style: "text-sm font-semibold text-orange-600" }
@@ -107,10 +117,12 @@ widget ManualBoard {
                             if card.column == "doing" {
                                 col {
                                     key: card.id
-                                    onclick: .CardClick(card.id),
-                                    style: "w-full bg-white rounded-lg px-3 py-2 shadow-sm gap-1 cursor-pointer"
+                                    draggable: true
+                                    ondragstart: .Drag(card.id)
+                                    style: "w-full bg-white rounded-lg px-3 py-2 shadow-sm gap-1"
                                     row {
-                                        style: "items-center gap-2"
+                                        onclick: .CardClick(card.id),
+                                        style: "items-center gap-2 cursor-pointer"
                                         if card.priority == "P0" {
                                             text "P0" { style: "text-[10px] text-red-600 bg-red-50 rounded px-1.5 py-0.5 font-medium" }
                                         }
@@ -125,11 +137,15 @@ widget ManualBoard {
                                     }
                                     row {
                                         style: "items-center gap-1"
-                                        button "◀" { style: card_btn }
-                                        button "▶" { style: card_btn }
-                                        button "▲" { style: card_btn }
-                                        button "▼" { style: card_btn }
-                                        button "×" { style: "text-xs text-gray-300 hover:text-red-500 w-auto px-1" }
+                                        button "◀" { onclick: .MoveLeft(card.id, card.column), style: card_btn }
+                                        button "▶" { onclick: .MoveRight(card.id, card.column), style: card_btn }
+                                        button "▲" { onclick: .Shift(card.id, -1), style: card_btn }
+                                        button "▼" { onclick: .Shift(card.id, 1), style: card_btn }
+                                        if .store.confirm_delete_id == card.id {
+                                            button "确认" { onclick: .RemoveCard(card.id), style: "text-xs text-white bg-red-500 hover:bg-red-600 rounded px-2 py-0.5 w-auto" }
+                                        } else {
+                                            button "×" { onclick: .AskRemove(card.id), style: "text-xs text-gray-300 hover:text-red-500 w-auto px-1" }
+                                        }
                                     }
                                 }
                             }
@@ -139,6 +155,8 @@ widget ManualBoard {
                 // 完成 done
                 col {
                     style: "w-80 bg-green-50 rounded-xl flex-shrink-0 p-3 gap-2"
+                    ondragover.prevent: .AllowDrop
+                    ondrop: .DropCol("done")
                     row {
                         style: "items-center justify-between px-1 py-2"
                         text "完成" { style: "text-sm font-semibold text-green-600" }
@@ -150,10 +168,12 @@ widget ManualBoard {
                             if card.column == "done" {
                                 col {
                                     key: card.id
-                                    onclick: .CardClick(card.id),
-                                    style: "w-full bg-white rounded-lg px-3 py-2 shadow-sm gap-1 cursor-pointer"
+                                    draggable: true
+                                    ondragstart: .Drag(card.id)
+                                    style: "w-full bg-white rounded-lg px-3 py-2 shadow-sm gap-1"
                                     row {
-                                        style: "items-center gap-2"
+                                        onclick: .CardClick(card.id),
+                                        style: "items-center gap-2 cursor-pointer"
                                         if card.priority == "P0" {
                                             text "P0" { style: "text-[10px] text-red-600 bg-red-50 rounded px-1.5 py-0.5 font-medium" }
                                         }
@@ -168,11 +188,15 @@ widget ManualBoard {
                                     }
                                     row {
                                         style: "items-center gap-1"
-                                        button "◀" { style: card_btn }
-                                        button "▶" { style: card_btn }
-                                        button "▲" { style: card_btn }
-                                        button "▼" { style: card_btn }
-                                        button "×" { style: "text-xs text-gray-300 hover:text-red-500 w-auto px-1" }
+                                        button "◀" { onclick: .MoveLeft(card.id, card.column), style: card_btn }
+                                        button "▶" { onclick: .MoveRight(card.id, card.column), style: card_btn }
+                                        button "▲" { onclick: .Shift(card.id, -1), style: card_btn }
+                                        button "▼" { onclick: .Shift(card.id, 1), style: card_btn }
+                                        if .store.confirm_delete_id == card.id {
+                                            button "确认" { onclick: .RemoveCard(card.id), style: "text-xs text-white bg-red-500 hover:bg-red-600 rounded px-2 py-0.5 w-auto" }
+                                        } else {
+                                            button "×" { onclick: .AskRemove(card.id), style: "text-xs text-gray-300 hover:text-red-500 w-auto px-1" }
+                                        }
                                     }
                                 }
                             }
@@ -259,5 +283,27 @@ widget ManualBoard {
         .EditTitle(v str) -> { store.EditTitle(v) }
         .EditDetail(v str) -> { store.EditDetail(v) }
         .SetPriority(p str) -> { store.SetPriority(p) }
+        .AskRemove(cid str) -> { store.AskRemove(cid) }
+        .RemoveCard(cid str) -> { store.RemoveCard(cid) }
+        .MoveLeft(cid str, col str) -> {
+            if col == "doing" {
+                store.MoveCard(cid, "todo")
+            }
+            if col == "done" {
+                store.MoveCard(cid, "doing")
+            }
+        }
+        .MoveRight(cid str, col str) -> {
+            if col == "todo" {
+                store.MoveCard(cid, "doing")
+            }
+            if col == "doing" {
+                store.MoveCard(cid, "done")
+            }
+        }
+        .Shift(cid str, d int) -> { store.ShiftCard(cid, d) }
+        .Drag(cid str) -> { store.DragCard(cid) }
+        .AllowDrop -> { }
+        .DropCol(col str) -> { store.DropCol(col) }
     }
 }
