@@ -8,9 +8,14 @@ use store: BoardsStore
 
 // 卡片操作按钮（T-07 接 AskRemove/MoveCard/ShiftCard；先占位渲染）
 style card_btn = "text-xs text-gray-400 hover:text-blue-500 w-auto px-1"
+// 编辑面板优先级单选按钮两态
+style pri_btn = "px-3 py-1 rounded-lg text-sm border border-gray-300 text-gray-500 w-auto"
+style pri_btn_p0 = "px-3 py-1 rounded-lg text-sm border border-red-400 bg-red-50 text-red-600 font-medium w-auto"
+style pri_btn_p1 = "px-3 py-1 rounded-lg text-sm border border-orange-400 bg-orange-50 text-orange-600 font-medium w-auto"
+style pri_btn_p2 = "px-3 py-1 rounded-lg text-sm border border-gray-400 bg-gray-100 text-gray-700 font-medium w-auto"
 
 widget ManualBoard {
-    msg { Init, TitleChanged, AddClick }
+    msg { Init, TitleChanged, AddClick, CardClick(str), CloseEditor, SaveEditor, EditTitle(str), EditDetail(str), SetPriority(str) }
 
     model {
         // 快速添加行输入缓冲（022 board.at 同型；值绑定自动回写）
@@ -59,7 +64,8 @@ widget ManualBoard {
                             if card.column == "todo" {
                                 col {
                                     key: card.id
-                                    style: "w-full bg-white rounded-lg px-3 py-2 shadow-sm gap-1"
+                                    onclick: .CardClick(card.id),
+                                    style: "w-full bg-white rounded-lg px-3 py-2 shadow-sm gap-1 cursor-pointer"
                                     row {
                                         style: "items-center gap-2"
                                         if card.priority == "P0" {
@@ -101,7 +107,8 @@ widget ManualBoard {
                             if card.column == "doing" {
                                 col {
                                     key: card.id
-                                    style: "w-full bg-white rounded-lg px-3 py-2 shadow-sm gap-1"
+                                    onclick: .CardClick(card.id),
+                                    style: "w-full bg-white rounded-lg px-3 py-2 shadow-sm gap-1 cursor-pointer"
                                     row {
                                         style: "items-center gap-2"
                                         if card.priority == "P0" {
@@ -143,7 +150,8 @@ widget ManualBoard {
                             if card.column == "done" {
                                 col {
                                     key: card.id
-                                    style: "w-full bg-white rounded-lg px-3 py-2 shadow-sm gap-1"
+                                    onclick: .CardClick(card.id),
+                                    style: "w-full bg-white rounded-lg px-3 py-2 shadow-sm gap-1 cursor-pointer"
                                     row {
                                         style: "items-center gap-2"
                                         if card.priority == "P0" {
@@ -172,6 +180,64 @@ widget ManualBoard {
                     }
                 }
             }
+            // 编辑面板（板下方条件渲染；点卡片展开）
+            if .store.editing_id != "" {
+                col {
+                    style: "bg-white rounded-xl border border-gray-200 p-4 gap-3"
+                    row {
+                        style: "items-center gap-2"
+                        text "编辑卡片" { style: "text-sm font-semibold text-gray-700" }
+                        text .store.editing_id { style: "text-xs font-mono text-blue-600 bg-blue-50 rounded px-1.5 py-0.5" }
+                    }
+                    row {
+                        style: "items-center gap-2"
+                        text "标题" { style: "text-sm text-gray-500 w-auto" }
+                        input {
+                            value: .store.edit_title,
+                            oninput: .EditTitle,
+                            placeholder: "卡片标题…",
+                            style: "flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                        }
+                    }
+                    row {
+                        style: "items-center gap-2"
+                        text "优先级" { style: "text-sm text-gray-500 w-auto" }
+                        button "P0 紧急" {
+                            onclick: .SetPriority("P0"),
+                            style: if .store.edit_priority == "P0" { pri_btn_p0 } else { pri_btn }
+                        }
+                        button "P1 高" {
+                            onclick: .SetPriority("P1"),
+                            style: if .store.edit_priority == "P1" { pri_btn_p1 } else { pri_btn }
+                        }
+                        button "P2 普通" {
+                            onclick: .SetPriority("P2"),
+                            style: if .store.edit_priority == "P2" { pri_btn_p2 } else { pri_btn }
+                        }
+                    }
+                    col {
+                        style: "gap-1"
+                        text "详情" { style: "text-sm text-gray-500" }
+                        textarea {
+                            value: .store.edit_detail,
+                            oninput: .EditDetail,
+                            placeholder: "多行详情…",
+                            style: "w-full px-3 py-2 border border-gray-300 rounded-lg text-sm min-h-20"
+                        }
+                    }
+                    row {
+                        style: "items-center gap-2"
+                        button "保存" {
+                            onclick: .SaveEditor,
+                            style: "px-4 py-2 bg-blue-500 text-white rounded-lg text-sm hover:bg-blue-600 w-auto"
+                        }
+                        button "取消" {
+                            onclick: .CloseEditor,
+                            style: "px-4 py-2 bg-gray-100 text-gray-600 rounded-lg text-sm hover:bg-gray-200 w-auto"
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -184,5 +250,14 @@ widget ManualBoard {
                 .new_title = ""
             }
         }
+        .CardClick(cid str) -> {
+            // 编辑面板打开时点其他卡切换目标（含删除确认切换的对称语义）
+            store.OpenEditor(cid)
+        }
+        .CloseEditor -> { store.CloseEditor() }
+        .SaveEditor -> { store.SaveEditor() }
+        .EditTitle(v str) -> { store.EditTitle(v) }
+        .EditDetail(v str) -> { store.EditDetail(v) }
+        .SetPriority(p str) -> { store.SetPriority(p) }
     }
 }

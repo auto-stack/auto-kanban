@@ -3,7 +3,7 @@
 //
 // 计数字段/最近归档在 handler 内预计算——VM view 不能调函数（Plan 402
 // 约束），模板只读字段。handler 间互调沿 041/038/013 先例（.LoadCurrent()）。
-use back.api: list_boards, board_cards, create_card, update_card, move_card, delete_card
+use back.api: list_boards, board_cards, create_card, update_card, delete_card, update_card, move_card, delete_card
 
 /// 写端点 body JSON 串构造用转义（语义同后端 manual_store.json_escape：
 /// 先反斜杠后引号再控制字符；VM 位置参数制下写端点第二形参为整条原始
@@ -45,6 +45,11 @@ store BoardsStore {
         var c_done_m str = "0"
         // manual 板整板空（引导添加态；.empty 对 manual 恒 false）
         var manual_empty bool = false
+        // 编辑面板缓冲（Open 时从卡拷入，Save 时提交，Close/Save 后清）
+        var editing_id str = ""
+        var edit_title str = ""
+        var edit_detail str = ""
+        var edit_priority str = ""
         var archived_label str = ""
         // archived 折叠区
         var show_archived bool = false
@@ -54,7 +59,7 @@ store BoardsStore {
         var counts_label str = ""
     }
 
-    msg { Init, Refresh, SelectBoard(str), ToggleArchived, LoadCurrent, AddCard(str) }
+    msg { Init, Refresh, SelectBoard(str), ToggleArchived, LoadCurrent, AddCard(str), OpenEditor(str), CloseEditor, SaveEditor, EditTitle(str), EditDetail(str), SetPriority(str) }
 
     on {
         .Init -> {
@@ -118,6 +123,38 @@ store BoardsStore {
                     .LoadCurrent()
                 }
             }
+        }
+        .OpenEditor(cid str) -> {
+            .editing_id = cid
+            var i int = 0
+            while i < .cards.len() {
+                if .cards[i].id == cid {
+                    .edit_title = .cards[i].title
+                    .edit_detail = .cards[i].detail
+                    .edit_priority = .cards[i].priority
+                }
+                i = i + 1
+            }
+        }
+        .CloseEditor -> {
+            .editing_id = ""
+        }
+        .SaveEditor -> {
+            if .editing_id != "" {
+                let body str = "{\"title\":\"" + esc(.edit_title) + "\",\"detail\":\"" + esc(.edit_detail) + "\",\"priority\":\"" + esc(.edit_priority) + "\"}"
+                update_card(.current_id, .editing_id, body)
+                .editing_id = ""
+                .LoadCurrent()
+            }
+        }
+        .EditTitle(v str) -> {
+            .edit_title = v
+        }
+        .EditDetail(v str) -> {
+            .edit_detail = v
+        }
+        .SetPriority(p str) -> {
+            .edit_priority = p
         }
         .LoadCurrent -> {
             if .current_id == "" {
