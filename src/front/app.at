@@ -2,6 +2,12 @@
 // store import 与页面同别名 `store`（022 app/board 同型）。
 use store: BoardsStore
 
+// 板切换按钮两态样式（015-notes chip/chip_on 先例：style 命名 + 视图
+// 内 if 比较当前板 id 换样式；w-auto：VM 端按钮无显式宽度会按 Fill 撑开）
+style tab_btn = "px-3 py-1 rounded-lg text-sm border border-gray-300 hover:border-blue-400 text-gray-600 w-auto"
+style tab_btn_on = "px-3 py-1 rounded-lg text-sm border border-blue-500 bg-blue-50 text-blue-700 font-medium w-auto"
+style tab_btn_refresh = "px-3 py-1 rounded-lg text-sm bg-blue-500 text-white hover:bg-blue-600 w-auto"
+
 widget App {
     routes {
         "/" -> use board
@@ -22,18 +28,19 @@ widget App {
                 }
                 row {
                     style: "items-center gap-3"
-                    // 板切换按钮组（配置驱动：boards.json 每条目一钮）
+                    // 板切换按钮组（配置驱动：boards.json 每条目一钮；
+                    // 当前板高亮 = 模式指示，PLAN-021）
                     for b in .store.boards {
                         button b.title {
                             onclick: .SelectBoard(b.id),
-                            style: "px-3 py-1 rounded-lg text-sm border border-gray-300 hover:border-blue-400"
+                            style: if b.id == .store.current_id { tab_btn_on } else { tab_btn }
                         }
                     }
                     // 计数标签（handler 预格式——VM view 不能调函数）
                     text .store.counts_label { style: "text-xs text-gray-400" }
                     button "↻ 刷新" {
                         onclick: .Refresh,
-                        style: "px-3 py-1 rounded-lg text-sm bg-blue-500 text-white hover:bg-blue-600"
+                        style: tab_btn_refresh
                     }
                 }
             }

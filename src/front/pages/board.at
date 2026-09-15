@@ -1,4 +1,6 @@
-// pages/board.at — the four-column board + archived fold + empty state.
+// pages/board.at — 按当前板 kind 条件渲染（PLAN-021 双模式）：
+//   lang_plans → 只读四列 + archived 折叠（Plan 579 交付，原样保留）
+//   manual     → ManualBoard 手动三列板（pages/manual_board.at）
 // Reads cards from the shared store, filters by column (cf. 022 board page).
 // 模板只读预计算字段（VM view 不能调函数，Plan 402 约束）——progress 为
 // 后端预格式 "3/7"/"—"，列计数/折叠标签为 store 预格式。
@@ -10,6 +12,7 @@ widget board {
     view {
         col {
             style: "p-4 gap-4"
+            if .store.current_kind == "lang_plans" {
             // 空态引导（数据源未找到/配置为空）
             if .store.empty {
                 col {
@@ -166,6 +169,10 @@ widget board {
                         }
                     }
                 }
+            }
+            }
+            if .store.current_kind == "manual" {
+                ManualBoard()
             }
         }
     }

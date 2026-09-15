@@ -1,0 +1,162 @@
+// pages/manual_board.at — 手动普通看板（kind = "manual"，PLAN-021）。
+// 三列（待办/进行中/完成）+ 卡片生命周期交互；数据经 store（boards_store）
+// 读写后端 manual 板（src/back/manual_store.at 无状态文件后端）。
+// 纪律：视图零函数调用（VM view 不能调函数，Plan 402）——列计数用 store
+// 预格式字段（c_todo/c_doing/c_done_m），空态用 manual_empty 旗标；按钮
+// 显式 w-auto（VM 端按钮无宽度会按 Fill 撑开，PLAN-616）。
+use store: BoardsStore
+
+// 卡片操作按钮（T-07 接 AskRemove/MoveCard/ShiftCard；先占位渲染）
+style card_btn = "text-xs text-gray-400 hover:text-blue-500 w-auto px-1"
+
+widget ManualBoard {
+    msg { Init }
+
+    view {
+        col {
+            style: "gap-4"
+            // 整板空态（引导添加——manual 空非错误空态）
+            if .store.manual_empty {
+                col {
+                    style: "p-8 items-center gap-2 bg-white rounded-xl border border-gray-200"
+                    text "看板还是空的" { style: "text-lg font-semibold text-gray-600" }
+                    text "点击上方添加第一张卡片" { style: "text-sm text-gray-400" }
+                }
+            }
+            // 三列
+            row {
+                style: "w-full gap-4 items-start"
+                // 待办 todo
+                col {
+                    style: "w-80 bg-blue-50 rounded-xl flex-shrink-0 p-3 gap-2"
+                    row {
+                        style: "items-center justify-between px-1 py-2"
+                        text "待办" { style: "text-sm font-semibold text-blue-700" }
+                        text .store.c_todo { style: "text-xs text-gray-400 bg-white rounded-full px-2 py-0.5" }
+                    }
+                    col {
+                        style: "gap-2"
+                        for card in .store.cards {
+                            if card.column == "todo" {
+                                col {
+                                    key: card.id
+                                    style: "w-full bg-white rounded-lg px-3 py-2 shadow-sm gap-1"
+                                    row {
+                                        style: "items-center gap-2"
+                                        if card.priority == "P0" {
+                                            text "P0" { style: "text-[10px] text-red-600 bg-red-50 rounded px-1.5 py-0.5 font-medium" }
+                                        }
+                                        if card.priority == "P1" {
+                                            text "P1" { style: "text-[10px] text-orange-600 bg-orange-50 rounded px-1.5 py-0.5 font-medium" }
+                                        }
+                                        if card.priority == "P2" {
+                                            text "P2" { style: "text-[10px] text-gray-500 bg-gray-100 rounded px-1.5 py-0.5" }
+                                        }
+                                        text card.title { style: "text-sm font-medium text-gray-800 truncate flex-1" }
+                                        text card.updated_at { style: "text-[10px] text-gray-400" }
+                                    }
+                                    row {
+                                        style: "items-center gap-1"
+                                        button "◀" { style: card_btn }
+                                        button "▶" { style: card_btn }
+                                        button "▲" { style: card_btn }
+                                        button "▼" { style: card_btn }
+                                        button "×" { style: "text-xs text-gray-300 hover:text-red-500 w-auto px-1" }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                // 进行中 doing
+                col {
+                    style: "w-80 bg-orange-50 rounded-xl flex-shrink-0 p-3 gap-2"
+                    row {
+                        style: "items-center justify-between px-1 py-2"
+                        text "进行中" { style: "text-sm font-semibold text-orange-600" }
+                        text .store.c_doing { style: "text-xs text-gray-400 bg-white rounded-full px-2 py-0.5" }
+                    }
+                    col {
+                        style: "gap-2"
+                        for card in .store.cards {
+                            if card.column == "doing" {
+                                col {
+                                    key: card.id
+                                    style: "w-full bg-white rounded-lg px-3 py-2 shadow-sm gap-1"
+                                    row {
+                                        style: "items-center gap-2"
+                                        if card.priority == "P0" {
+                                            text "P0" { style: "text-[10px] text-red-600 bg-red-50 rounded px-1.5 py-0.5 font-medium" }
+                                        }
+                                        if card.priority == "P1" {
+                                            text "P1" { style: "text-[10px] text-orange-600 bg-orange-50 rounded px-1.5 py-0.5 font-medium" }
+                                        }
+                                        if card.priority == "P2" {
+                                            text "P2" { style: "text-[10px] text-gray-500 bg-gray-100 rounded px-1.5 py-0.5" }
+                                        }
+                                        text card.title { style: "text-sm font-medium text-gray-800 truncate flex-1" }
+                                        text card.updated_at { style: "text-[10px] text-gray-400" }
+                                    }
+                                    row {
+                                        style: "items-center gap-1"
+                                        button "◀" { style: card_btn }
+                                        button "▶" { style: card_btn }
+                                        button "▲" { style: card_btn }
+                                        button "▼" { style: card_btn }
+                                        button "×" { style: "text-xs text-gray-300 hover:text-red-500 w-auto px-1" }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                // 完成 done
+                col {
+                    style: "w-80 bg-green-50 rounded-xl flex-shrink-0 p-3 gap-2"
+                    row {
+                        style: "items-center justify-between px-1 py-2"
+                        text "完成" { style: "text-sm font-semibold text-green-600" }
+                        text .store.c_done_m { style: "text-xs text-gray-400 bg-white rounded-full px-2 py-0.5" }
+                    }
+                    col {
+                        style: "gap-2"
+                        for card in .store.cards {
+                            if card.column == "done" {
+                                col {
+                                    key: card.id
+                                    style: "w-full bg-white rounded-lg px-3 py-2 shadow-sm gap-1"
+                                    row {
+                                        style: "items-center gap-2"
+                                        if card.priority == "P0" {
+                                            text "P0" { style: "text-[10px] text-red-600 bg-red-50 rounded px-1.5 py-0.5 font-medium" }
+                                        }
+                                        if card.priority == "P1" {
+                                            text "P1" { style: "text-[10px] text-orange-600 bg-orange-50 rounded px-1.5 py-0.5 font-medium" }
+                                        }
+                                        if card.priority == "P2" {
+                                            text "P2" { style: "text-[10px] text-gray-500 bg-gray-100 rounded px-1.5 py-0.5" }
+                                        }
+                                        text card.title { style: "text-sm font-medium text-gray-800 truncate flex-1" }
+                                        text card.updated_at { style: "text-[10px] text-gray-400" }
+                                    }
+                                    row {
+                                        style: "items-center gap-1"
+                                        button "◀" { style: card_btn }
+                                        button "▶" { style: card_btn }
+                                        button "▲" { style: card_btn }
+                                        button "▼" { style: card_btn }
+                                        button "×" { style: "text-xs text-gray-300 hover:text-red-500 w-auto px-1" }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    on {
+        .Init -> { }
+    }
+}
