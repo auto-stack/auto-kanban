@@ -3,7 +3,20 @@
 //
 // 计数字段/最近归档在 handler 内预计算——VM view 不能调函数（Plan 402
 // 约束），模板只读字段。handler 间互调沿 041/038/013 先例（.LoadCurrent()）。
-use back.api: list_boards, board_cards
+use back.api: list_boards, board_cards, create_card, update_card, move_card, delete_card
+
+/// 写端点 body JSON 串构造用转义（语义同后端 manual_store.json_escape：
+/// 先反斜杠后引号再控制字符；VM 位置参数制下写端点第二形参为整条原始
+/// body 串，生成客户端按形参名包一层 {body: <此处构造的串>}，PLAN-021）。
+fn esc(s str) str {
+    var out str = s
+    out = out.replace("\\", "\\\\")
+    out = out.replace("\"", "\\\"")
+    out = out.replace("\n", "\\n")
+    out = out.replace("\t", "\\t")
+    out = out.replace("\r", "\\r")
+    return out
+}
 
 store BoardsStore {
     model {
@@ -41,7 +54,7 @@ store BoardsStore {
         var counts_label str = ""
     }
 
-    msg { Init, Refresh, SelectBoard(str), ToggleArchived, LoadCurrent }
+    msg { Init, Refresh, SelectBoard(str), ToggleArchived, LoadCurrent, AddCard(str) }
 
     on {
         .Init -> {
@@ -94,6 +107,16 @@ store BoardsStore {
                 .toggle_label = "▾"
             } else {
                 .toggle_label = "▸"
+            }
+        }
+        .AddCard(title str) -> {
+            // 空标题拦（前端双重保险——后端 manual_store.create 同拦）
+            if title != "" {
+                if .current_kind == "manual" {
+                    let body str = "{\"title\":\"" + esc(title) + "\",\"column\":\"todo\"}"
+                    create_card(.current_id, body)
+                    .LoadCurrent()
+                }
             }
         }
         .LoadCurrent -> {

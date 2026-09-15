@@ -1,4 +1,4 @@
-// pages/manual_board.at — 手动普通看板（kind = "manual"，PLAN-021）。
+// manual_board.at — 手动普通看板（kind = "manual"，PLAN-021）。
 // 三列（待办/进行中/完成）+ 卡片生命周期交互；数据经 store（boards_store）
 // 读写后端 manual 板（src/back/manual_store.at 无状态文件后端）。
 // 纪律：视图零函数调用（VM view 不能调函数，Plan 402）——列计数用 store
@@ -10,11 +10,30 @@ use store: BoardsStore
 style card_btn = "text-xs text-gray-400 hover:text-blue-500 w-auto px-1"
 
 widget ManualBoard {
-    msg { Init }
+    msg { Init, TitleChanged, AddClick }
+
+    model {
+        // 快速添加行输入缓冲（022 board.at 同型；值绑定自动回写）
+        var new_title str = ""
+    }
 
     view {
         col {
             style: "gap-4"
+            // 快速添加行（新卡默认进「待办」列）
+            row {
+                style: "gap-2 items-center"
+                input {
+                    placeholder: "输入卡片标题…",
+                    value: .new_title,
+                    oninput: .TitleChanged,
+                    style: "px-3 py-2 border border-gray-300 rounded-lg text-sm w-72"
+                }
+                button "＋ 添加" {
+                    onclick: .AddClick,
+                    style: "px-4 py-2 bg-blue-500 text-white rounded-lg text-sm hover:bg-blue-600 w-auto"
+                }
+            }
             // 整板空态（引导添加——manual 空非错误空态）
             if .store.manual_empty {
                 col {
@@ -158,5 +177,12 @@ widget ManualBoard {
 
     on {
         .Init -> { }
+        .TitleChanged -> { }
+        .AddClick -> {
+            if .new_title != "" {
+                store.AddCard(.new_title)
+                .new_title = ""
+            }
+        }
     }
 }

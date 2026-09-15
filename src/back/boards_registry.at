@@ -77,34 +77,59 @@ fn zero_card_def() Card {
 /// body JSON 的 str 字段解包（解析失败/缺字段 → ""）。VM HTTP 后端把
 /// 请求体作为单个原始字符串推给 handler（Plan 346 位置参数制），解包
 /// 在本模块做——api.at 是后端编译入口，Plan 550 门 E5501 禁 nil 字面量。
-/// 注意取值必须走 json.as_string：""+JsonValue 拼接得 JSON 编码形态
-/// （带引号，2026-09-15 实测），非原始内容。
+/// 注意：①取值必须 json.as_string（""+JsonValue 得 JSON 编码形态带引号，
+/// 2026-09-15 实测）；②缺字段判定必须 json.has_key——json.get 对缺失键
+/// 返回非 nil Null 值（实测），== nil 判不中。
+/// 双形态兼容：curl 直发 {"title":…}（顶层字段）与生成客户端
+/// {"body":"{\"title\":…}"}（非路径参数按形参名包一层，双层编码）都收。
 fn body_str(body str, key str) str {
     var out str = ""
     let parsed = json.parse(body)
     if parsed == nil {
         return out
     }
-    let v = json.get(parsed, key)
-    if v == nil {
+    if json.has_key(parsed, key) {
+        let v = json.get(parsed, key)
+        out = json.as_string(v)
         return out
     }
-    out = json.as_string(v)
+    if json.has_key(parsed, "body") {
+        let inner = json.get(parsed, "body")
+        let inner_text str = json.as_string(inner)
+        let nested = json.parse(inner_text)
+        if nested != nil {
+            if json.has_key(nested, key) {
+                let v2 = json.get(nested, key)
+                out = json.as_string(v2)
+            }
+        }
+    }
     return out
 }
 
-/// body JSON 的 int 字段解包（解析失败/缺字段 → 0）。
+/// body JSON 的 int 字段解包（解析失败/缺字段 → 0；双形态兼容同 body_str）。
 fn body_int(body str, key str) int {
     var out int = 0
     let parsed = json.parse(body)
     if parsed == nil {
         return out
     }
-    let v = json.get(parsed, key)
-    if v == nil {
+    if json.has_key(parsed, key) {
+        let v = json.get(parsed, key)
+        out = json.as_int(v)
         return out
     }
-    out = json.as_int(v)
+    if json.has_key(parsed, "body") {
+        let inner = json.get(parsed, "body")
+        let inner_text str = json.as_string(inner)
+        let nested = json.parse(inner_text)
+        if nested != nil {
+            if json.has_key(nested, key) {
+                let v2 = json.get(nested, key)
+                out = json.as_int(v2)
+            }
+        }
+    }
     return out
 }
 
