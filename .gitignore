@@ -6,3 +6,6 @@ target/
 .am/
 tests/test-results/
 .auto/
+data/
+tests/testdata/manual/manual.test.json
+rust-workspace/

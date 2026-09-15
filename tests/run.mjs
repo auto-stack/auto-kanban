@@ -31,6 +31,8 @@ async function main() {
     ...process.env,
     AUTO_LANG_ROOT: join(repoRoot, 'tests', 'testdata', 'fake-lang'),
     AUTO_KANBAN_BOARDS: join(repoRoot, 'tests', 'testdata', 'boards', 'boards.test.json'),
+    // PLAN-021 T08：manual 板数据文件（每测前由 manual.spec.ts 从模板重拷）
+    AUTO_KANBAN_DATA: join(repoRoot, 'tests', 'testdata', 'manual', 'manual.test.json'),
   };
   const child = spawn('auto', ['run', '--server', 'vm', '-B', String(BACK), '-F', String(FRONT)], {
     cwd: repoRoot,

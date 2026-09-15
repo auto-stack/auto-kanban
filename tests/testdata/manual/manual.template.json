@@ -1,0 +1,9 @@
+{
+  "cards": [
+    { "id": "m1", "title": "手动卡一", "detail": "第一行\n第二行 \"引号\"", "column": "todo", "priority": "P0", "order": 0, "updated_at": "2026-09-15T09:00:00" },
+    { "id": "m2", "title": "手动卡二", "detail": "", "column": "todo", "priority": "P2", "order": 1, "updated_at": "2026-09-15T09:01:00" },
+    { "id": "m3", "title": "手动卡三", "detail": "", "column": "todo", "priority": "P1", "order": 2, "updated_at": "2026-09-15T09:02:00" },
+    { "id": "m4", "title": "进行中卡", "detail": "", "column": "doing", "priority": "P2", "order": 0, "updated_at": "2026-09-15T09:03:00" },
+    { "id": "m5", "title": "完成卡", "detail": "", "column": "done", "priority": "P1", "order": 0, "updated_at": "2026-09-15T09:04:00" }
+  ]
+}

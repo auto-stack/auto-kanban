@@ -1,6 +1,7 @@
 {
   "boards": [
     { "id": "lang-plans", "title": "计划", "kind": "lang_plans", "root_env": "AUTO_LANG_ROOT" },
-    { "id": "lang-plans-2", "title": "计划二号", "kind": "lang_plans", "root_env": "AUTO_LANG_ROOT" }
+    { "id": "lang-plans-2", "title": "计划二号", "kind": "lang_plans", "root_env": "AUTO_LANG_ROOT" },
+    { "id": "manual", "title": "普通看板", "kind": "manual", "root_env": "" }
   ]
 }
