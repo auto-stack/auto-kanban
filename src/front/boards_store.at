@@ -3,7 +3,7 @@
 //
 // 计数字段/最近归档在 handler 内预计算——VM view 不能调函数（Plan 402
 // 约束），模板只读字段。handler 间互调沿 041/038/013 先例（.LoadCurrent()）。
-use back.api: list_boards, board_cards, create_card, update_card, move_card, delete_card, update_card, move_card, delete_card
+use back.api: list_boards, board_cards, create_card, update_card, move_card, delete_card
 
 /// 写端点 body JSON 串构造用转义（语义同后端 manual_store.json_escape：
 /// 先反斜杠后引号再控制字符；VM 位置参数制下写端点第二形参为整条原始

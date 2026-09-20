@@ -1,12 +1,24 @@
 // app.at — App shell. Single-page board; routes just render the board page.
 // store import 与页面同别名 `store`（022 app/board 同型）。
+//
+// UX 重设计（VM/Vue parity · PLAN-038 Phase A）：样式只引用 AutoUI **核心**
+// 语义 token（bg-background/bg-card/border-border/bg-primary/text-muted-foreground
+// 等，codegen generate_base_css 已生成键），双端经同一 ThemeRegistry 解析，
+// 深浅主题与 accent 自动跟随。禁止硬编码 palette；禁止扩展色 success/warning
+// （脚手架未吐变量——平台债归 Phase B / P657-D2，不在本 app 打 gen 补丁）。
 use store: BoardsStore
 
-// 板切换按钮两态样式（015-notes chip/chip_on 先例：style 命名 + 视图
-// 内 if 比较当前板 id 换样式；w-auto：VM 端按钮无显式宽度会按 Fill 撑开）
-style tab_btn = "px-3 py-1 rounded-lg text-sm border border-gray-300 hover:border-blue-400 text-gray-600 w-auto"
-style tab_btn_on = "px-3 py-1 rounded-lg text-sm border border-blue-500 bg-blue-50 text-blue-700 font-medium w-auto"
-style tab_btn_refresh = "px-3 py-1 rounded-lg text-sm bg-blue-500 text-white hover:bg-blue-600 w-auto"
+// 分段切换：选中 = primary 软底，未选中 = ghost 边框（Linear quiet chrome）
+style page_shell = "min-h-screen bg-background text-foreground"
+style chrome_bar = "w-full items-center gap-3 px-4 py-3 border-b border-border bg-card shrink-0"
+style brand_name = "text-sm font-semibold tracking-tight text-foreground"
+style brand_board = "text-xs text-muted-foreground shrink-0"
+style seg_btn = "px-3 py-1.5 rounded-md text-sm border border-border text-muted-foreground hover:bg-accent w-auto"
+style seg_btn_on = "px-3 py-1.5 rounded-md text-sm border border-primary/40 bg-primary/15 text-primary font-medium w-auto"
+style btn_refresh = "px-3 py-1.5 rounded-md text-sm bg-primary text-primary-foreground font-medium hover:bg-primary/90 w-auto"
+style counts_label = "text-xs text-muted-foreground tabular-nums"
+style chrome_actions = "items-center gap-2 flex-wrap justify-end"
+style route_col = "flex-1 min-h-0"
 
 widget App {
     routes {
@@ -17,36 +29,35 @@ widget App {
 
     view {
         col {
-            style: "min-h-screen bg-gray-50 text-gray-900"
-            // Header
+            style: page_shell
+            // Header / chrome
             row {
-                style: "w-full items-center justify-between p-4 border-b border-gray-200 bg-white"
+                style: chrome_bar
                 row {
-                    style: "items-center gap-2"
-                    text "AutoOS Kanban" { style: "text-xl font-bold text-gray-800" }
-                    text .store.current_title { style: "text-sm text-gray-400" }
+                    style: "items-center gap-2 min-w-0"
+                    text "AutoUI Kanban" { style: brand_name }
+                    text .store.current_title { style: brand_board }
                 }
+                spacer
                 row {
-                    style: "items-center gap-3"
-                    // 板切换按钮组（配置驱动：boards.json 每条目一钮；
-                    // 当前板高亮 = 模式指示，PLAN-021）
+                    style: chrome_actions
+                    // 板切换（配置驱动；当前板高亮 = 模式指示）
                     for b in .store.boards {
                         button b.title {
                             onclick: .SelectBoard(b.id),
-                            style: if b.id == .store.current_id { tab_btn_on } else { tab_btn }
+                            style: if b.id == .store.current_id { seg_btn_on } else { seg_btn }
                         }
                     }
-                    // 计数标签（handler 预格式——VM view 不能调函数）
-                    text .store.counts_label { style: "text-xs text-gray-400" }
+                    text .store.counts_label { style: counts_label }
                     button "↻ 刷新" {
                         onclick: .Refresh,
-                        style: tab_btn_refresh
+                        style: btn_refresh
                     }
                 }
             }
             // Route outlet
             col {
-                style: "flex-1"
+                style: route_col
                 outlet
             }
         }

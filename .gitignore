@@ -6,6 +6,13 @@ target/
 .am/
 tests/test-results/
 .auto/
+screenshots/
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+*.webp
 data/
 tests/testdata/manual/manual.test.json
 rust-workspace/

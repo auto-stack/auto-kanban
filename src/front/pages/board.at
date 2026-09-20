@@ -1,44 +1,88 @@
 // pages/board.at — 按当前板 kind 条件渲染（PLAN-021 双模式）：
-//   lang_plans → 只读四列 + archived 折叠（Plan 579 交付，原样保留）
+//   lang_plans → 只读四列 + archived 折叠
 //   manual     → 手动三列板（本文件内联视图；iced 路由页跨文件组件
 //                调用不渲染——实测 2026-09-15，故不拆 ManualBoard 组件）
-// Reads cards from the shared store, filters by column (cf. 022 board page).
-// 模板只读预计算字段（VM view 不能调函数，Plan 402 约束）——progress 为
-// 后端预格式 "3/7"/"—"，列计数/折叠标签为 store 预格式。
+//
+// UX 重设计 · VM/Vue parity 纪律（PLAN-038 Phase A + B）：
+//   1. 本 app 缺省只写**核心**语义 token recipe（bg-background/bg-card/
+//      border-border/bg-primary/text-muted-foreground/bg-destructive…）。
+//      Phase B 起平台 scaffold 已吐出 success/warning/info/error（index.css
+//      + tailwind），`.at` 可安全使用扩展色；本 app 缺省仍中性完成列/
+//      P1=primary/10，直至产品侧决定恢复 text-success。
+//   2. 不用硬编码 palette（bg-blue-500 / text-red-600 等）。
+//   3. 模板只读预计算字段（VM view 不能调函数，Plan 402）。
+//   4. 保留测试可定位文案：列名/占位符/按钮名（◀▶▲▼×/确认/保存…）。
+//   5. 完成列/标题降噪为 muted；P1 优先级用 primary 弱底（P0=destructive）。
 use store: BoardsStore
 
-style card_btn = "text-xs text-gray-400 hover:text-blue-500 w-auto px-1"
-style pri_btn = "px-3 py-1 rounded-lg text-sm border border-gray-300 text-gray-500 w-auto"
-style pri_btn_p0 = "px-3 py-1 rounded-lg text-sm border border-red-400 bg-red-50 text-red-600 font-medium w-auto"
-style pri_btn_p1 = "px-3 py-1 rounded-lg text-sm border border-orange-400 bg-orange-50 text-orange-600 font-medium w-auto"
-style pri_btn_p2 = "px-3 py-1 rounded-lg text-sm border border-gray-400 bg-gray-100 text-gray-700 font-medium w-auto"
+// ---- shared tokens（核心词表白名单，PLAN-038 Phase A）----
+style board_pad = "p-4 gap-4 flex-1 min-h-0 overflow-auto"
+style empty_panel = "p-8 items-center gap-2 bg-card rounded-xl border border-border"
+style empty_title = "text-lg font-semibold text-foreground"
+style empty_body = "text-sm text-muted-foreground text-center"
+style col_shell = "w-72 bg-muted/40 rounded-xl flex-shrink-0 p-2 gap-2 border border-border"
+style col_head = "items-center justify-between px-2 py-2 gap-2"
+style col_name = "text-sm font-semibold text-foreground"
+style col_name_primary = "text-sm font-semibold text-primary"
+style col_name_muted = "text-sm font-semibold text-muted-foreground"
+style col_count = "text-xs text-muted-foreground bg-card border border-border rounded-full px-2 py-0.5"
+style col_count_primary = "text-xs text-primary bg-primary/10 border border-primary/30 rounded-full px-2 py-0.5"
+style col_count_muted = "text-xs text-muted-foreground bg-muted border border-border rounded-full px-2 py-0.5"
+style card_base = "w-full bg-card rounded-lg px-3 py-2 shadow-sm border border-border gap-2"
+style card_click_row = "items-center gap-2 cursor-pointer w-full"
+style card_title = "text-sm font-medium text-foreground truncate flex-1"
+style card_detail = "text-xs text-muted-foreground truncate"
+style time_label = "text-xs text-muted-foreground shrink-0"
+style act_btn = "text-xs text-muted-foreground hover:text-primary hover:bg-accent rounded px-1.5 py-0.5 w-auto"
+style act_del = "text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded px-1.5 py-0.5 w-auto"
+style act_confirm = "text-xs font-medium text-primary-foreground bg-destructive hover:bg-destructive/90 rounded px-2 py-0.5 w-auto"
+style pri_p0 = "text-xs font-semibold text-destructive bg-destructive/10 rounded px-1.5 py-0.5 shrink-0"
+style pri_p1 = "text-xs font-semibold text-primary bg-primary/10 rounded px-1.5 py-0.5 shrink-0"
+style pri_p2 = "text-xs text-muted-foreground bg-muted rounded px-1.5 py-0.5 shrink-0"
+style quick_row = "gap-2 items-center flex-wrap"
+style input_base = "px-3 py-2 border border-input rounded-md text-sm bg-background text-foreground w-72"
+style btn_primary = "px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 w-auto"
+style btn_secondary = "px-4 py-2 rounded-md bg-secondary text-secondary-foreground text-sm font-medium hover:bg-secondary/80 w-auto"
+style editor_panel = "bg-card rounded-xl border border-border p-4 gap-3 shadow-sm"
+style field_label = "text-sm text-muted-foreground w-auto shrink-0"
+style field_row = "items-center gap-2"
+style pri_off = "px-3 py-1.5 rounded-md text-sm border border-border text-muted-foreground w-auto"
+style pri_on_p0 = "px-3 py-1.5 rounded-md text-sm border border-destructive/50 bg-destructive/10 text-destructive font-medium w-auto"
+style pri_on_p1 = "px-3 py-1.5 rounded-md text-sm border border-primary/40 bg-primary/10 text-primary font-medium w-auto"
+style pri_on_p2 = "px-3 py-1.5 rounded-md text-sm border border-border bg-muted text-foreground font-medium w-auto"
+style plan_id_chip = "text-xs font-medium text-primary bg-primary/10 rounded px-1.5 py-0.5"
+style plan_badge = "text-xs text-muted-foreground border border-border rounded px-1"
+style plan_card = "w-full bg-card rounded-lg px-3 py-2 shadow-sm border border-border gap-1"
+style archived_panel = "mt-2 bg-card rounded-xl border border-border p-3 gap-2"
+style archived_item = "w-64 bg-muted/40 rounded-lg px-3 py-2 border border-border gap-1"
+style toggle_btn = "text-muted-foreground hover:text-foreground text-sm w-auto px-1"
 
 widget board {
     msg { Init, ToggleArchived, TitleChanged, AddClick, CardClick(str), CloseEditor, SaveEditor, EditTitle(str), EditDetail(str), SetPriority(str), AskRemove(str), RemoveCard(str), MoveLeft(str, str), MoveRight(str, str), Shift(str, int), Drag(str), AllowDrop, DropCol(str) }
 
     view {
         col {
-            style: "p-4 gap-4"
+            style: board_pad
             if .store.current_kind == "lang_plans" {
             // 空态引导（数据源未找到/配置为空）
             if .store.empty {
                 col {
-                    style: "p-8 items-center gap-2 bg-white rounded-xl border border-gray-200"
-                    text "未找到看板数据" { style: "text-lg font-semibold text-gray-600" }
-                    text "检查 boards.json 配置，或为看板条目的 root_env 设置数据源环境变量（lang-plans 板为 AUTO_LANG_ROOT）" { style: "text-sm text-gray-400" }
+                    style: empty_panel
+                    text "未找到看板数据" { style: empty_title }
+                    text "检查 boards.json 配置，或为看板条目的 root_env 设置数据源环境变量（lang-plans 板为 AUTO_LANG_ROOT）" { style: empty_body }
                 }
             }
-            // 四列看板
+            // 四列看板（只读 · token 化）
             if !.store.empty {
                 row {
-                    style: "w-full gap-4 items-start"
+                    style: "w-full gap-3 items-start"
                     // drafting
                     col {
-                        style: "w-80 bg-gray-100 rounded-xl flex-shrink-0 p-3 gap-2"
+                        style: col_shell
                         row {
-                            style: "items-center justify-between px-1 py-2"
-                            text "Drafting" { style: "text-sm font-semibold text-gray-700" }
-                            text .store.c_drafting { style: "text-xs text-gray-400 bg-white rounded-full px-2 py-0.5" }
+                            style: col_head
+                            text "Drafting" { style: col_name }
+                            text .store.c_drafting { style: col_count }
                         }
                         col {
                             style: "gap-2"
@@ -46,17 +90,17 @@ widget board {
                                 if card.column == "drafting" {
                                     col {
                                         key: card.id
-                                        style: "w-full bg-white rounded-lg px-3 py-2 shadow-sm gap-1"
+                                        style: plan_card
                                         row {
                                             style: "items-center gap-2"
-                                            text card.id { style: "text-xs font-mono text-blue-600 bg-blue-50 rounded px-1.5 py-0.5" }
+                                            text card.id { style: plan_id_chip }
                                             if card.badge == "parked" {
-                                                text "parked" { style: "text-[10px] text-gray-400 border border-gray-300 rounded px-1" }
+                                                text "parked" { style: plan_badge }
                                             }
-                                            text card.updated_at { style: "ml-auto text-[10px] text-gray-400" }
+                                            text card.updated_at { style: time_label + " ml-auto" }
                                         }
-                                        text card.title { style: "text-sm font-medium text-gray-800 truncate" }
-                                        text card.progress { style: "text-[10px] text-gray-500" }
+                                        text card.title { style: card_title }
+                                        text card.progress { style: "text-xs text-muted-foreground" }
                                     }
                                 }
                             }
@@ -64,11 +108,11 @@ widget board {
                     }
                     // executing
                     col {
-                        style: "w-80 bg-gray-100 rounded-xl flex-shrink-0 p-3 gap-2"
+                        style: col_shell
                         row {
-                            style: "items-center justify-between px-1 py-2"
-                            text "Executing" { style: "text-sm font-semibold text-gray-700" }
-                            text .store.c_executing { style: "text-xs text-gray-400 bg-white rounded-full px-2 py-0.5" }
+                            style: col_head
+                            text "Executing" { style: col_name_primary }
+                            text .store.c_executing { style: col_count_primary }
                         }
                         col {
                             style: "gap-2"
@@ -76,17 +120,17 @@ widget board {
                                 if card.column == "executing" {
                                     col {
                                         key: card.id
-                                        style: "w-full bg-white rounded-lg px-3 py-2 shadow-sm gap-1"
+                                        style: plan_card
                                         row {
                                             style: "items-center gap-2"
-                                            text card.id { style: "text-xs font-mono text-blue-600 bg-blue-50 rounded px-1.5 py-0.5" }
+                                            text card.id { style: plan_id_chip }
                                             if card.badge == "parked" {
-                                                text "parked" { style: "text-[10px] text-gray-400 border border-gray-300 rounded px-1" }
+                                                text "parked" { style: plan_badge }
                                             }
-                                            text card.updated_at { style: "ml-auto text-[10px] text-gray-400" }
+                                            text card.updated_at { style: time_label + " ml-auto" }
                                         }
-                                        text card.title { style: "text-sm font-medium text-gray-800 truncate" }
-                                        text card.progress { style: "text-[10px] text-gray-500" }
+                                        text card.title { style: card_title }
+                                        text card.progress { style: "text-xs text-muted-foreground" }
                                     }
                                 }
                             }
@@ -94,11 +138,11 @@ widget board {
                     }
                     // execution_done
                     col {
-                        style: "w-80 bg-gray-100 rounded-xl flex-shrink-0 p-3 gap-2"
+                        style: col_shell
                         row {
-                            style: "items-center justify-between px-1 py-2"
-                            text "Execution Done" { style: "text-sm font-semibold text-gray-700" }
-                            text .store.c_done { style: "text-xs text-gray-400 bg-white rounded-full px-2 py-0.5" }
+                            style: col_head
+                            text "Execution Done" { style: col_name_muted }
+                            text .store.c_done { style: col_count_muted }
                         }
                         col {
                             style: "gap-2"
@@ -106,14 +150,14 @@ widget board {
                                 if card.column == "execution_done" {
                                     col {
                                         key: card.id
-                                        style: "w-full bg-white rounded-lg px-3 py-2 shadow-sm gap-1"
+                                        style: plan_card
                                         row {
                                             style: "items-center gap-2"
-                                            text card.id { style: "text-xs font-mono text-blue-600 bg-blue-50 rounded px-1.5 py-0.5" }
-                                            text card.updated_at { style: "ml-auto text-[10px] text-gray-400" }
+                                            text card.id { style: plan_id_chip }
+                                            text card.updated_at { style: time_label + " ml-auto" }
                                         }
-                                        text card.title { style: "text-sm font-medium text-gray-800 truncate" }
-                                        text card.progress { style: "text-[10px] text-gray-500" }
+                                        text card.title { style: card_title }
+                                        text card.progress { style: "text-xs text-muted-foreground" }
                                     }
                                 }
                             }
@@ -121,11 +165,11 @@ widget board {
                     }
                     // reviewed
                     col {
-                        style: "w-80 bg-gray-100 rounded-xl flex-shrink-0 p-3 gap-2"
+                        style: col_shell
                         row {
-                            style: "items-center justify-between px-1 py-2"
-                            text "Reviewed" { style: "text-sm font-semibold text-gray-700" }
-                            text .store.c_reviewed { style: "text-xs text-gray-400 bg-white rounded-full px-2 py-0.5" }
+                            style: col_head
+                            text "Reviewed" { style: col_name }
+                            text .store.c_reviewed { style: col_count }
                         }
                         col {
                             style: "gap-2"
@@ -133,14 +177,14 @@ widget board {
                                 if card.column == "reviewed" {
                                     col {
                                         key: card.id
-                                        style: "w-full bg-white rounded-lg px-3 py-2 shadow-sm gap-1"
+                                        style: plan_card
                                         row {
                                             style: "items-center gap-2"
-                                            text card.id { style: "text-xs font-mono text-blue-600 bg-blue-50 rounded px-1.5 py-0.5" }
-                                            text card.updated_at { style: "ml-auto text-[10px] text-gray-400" }
+                                            text card.id { style: plan_id_chip }
+                                            text card.updated_at { style: time_label + " ml-auto" }
                                         }
-                                        text card.title { style: "text-sm font-medium text-gray-800 truncate" }
-                                        text card.progress { style: "text-[10px] text-gray-500" }
+                                        text card.title { style: card_title }
+                                        text card.progress { style: "text-xs text-muted-foreground" }
                                     }
                                 }
                             }
@@ -149,14 +193,14 @@ widget board {
                 }
                 // Archived 折叠区
                 col {
-                    style: "mt-2 bg-white rounded-xl border border-gray-200 p-3 gap-2"
+                    style: archived_panel
                     row {
                         style: "items-center gap-2"
                         button .toggle_label {
                             onclick: .ToggleArchived,
-                            style: "text-gray-400 text-sm w-6"
+                            style: toggle_btn
                         }
-                        text .store.archived_label { style: "text-sm font-semibold text-gray-500" }
+                        text .store.archived_label { style: "text-sm font-medium text-muted-foreground" }
                     }
                     if .show_archived {
                         row {
@@ -164,13 +208,13 @@ widget board {
                             for card in .store.archived_recent {
                                 col {
                                     key: card.id
-                                    style: "w-64 bg-gray-50 rounded-lg px-3 py-2 border border-gray-100 gap-1"
+                                    style: archived_item
                                     row {
                                         style: "items-center gap-2"
-                                        text card.id { style: "text-xs font-mono text-gray-500" }
-                                        text card.updated_at { style: "ml-auto text-[10px] text-gray-400" }
+                                        text card.id { style: "text-xs font-medium text-muted-foreground" }
+                                        text card.updated_at { style: time_label + " ml-auto" }
                                     }
-                                    text card.title { style: "text-xs text-gray-600 truncate" }
+                                    text card.title { style: "text-xs text-foreground truncate" }
                                 }
                             }
                         }
@@ -179,40 +223,40 @@ widget board {
             }
             }
             if .store.current_kind == "manual" {
-                // 快速添加行（新卡默认进「待办」列）
+                // 快速添加（新卡默认进「待办」）
                 row {
-                    style: "gap-2 items-center"
+                    style: quick_row
                     input {
                         placeholder: "输入卡片标题…",
                         value: .new_title,
                         oninput: .TitleChanged,
-                        style: "px-3 py-2 border border-gray-300 rounded-lg text-sm w-72"
+                        style: input_base
                     }
                     button "＋ 添加" {
                         onclick: .AddClick,
-                        style: "px-4 py-2 bg-blue-500 text-white rounded-lg text-sm hover:bg-blue-600 w-auto"
+                        style: btn_primary
                     }
                 }
                 // 整板空态（引导添加——manual 空非错误空态）
                 if .store.manual_empty {
                     col {
-                        style: "p-8 items-center gap-2 bg-white rounded-xl border border-gray-200"
-                        text "看板还是空的" { style: "text-lg font-semibold text-gray-600" }
-                        text "点击上方添加第一张卡片" { style: "text-sm text-gray-400" }
+                        style: empty_panel
+                        text "看板还是空的" { style: empty_title }
+                        text "点击上方添加第一张卡片" { style: empty_body }
                     }
                 }
-                // 三列
+                // 三列 · 中性表面 + 状态色标题（不再整列染色）
                 row {
-                    style: "w-full gap-4 items-start"
+                    style: "w-full gap-3 items-start"
                     // 待办 todo
                     col {
-                        style: "w-80 bg-blue-50 rounded-xl flex-shrink-0 p-3 gap-2"
+                        style: col_shell
                         ondragover.prevent: .AllowDrop
                         ondrop: .DropCol("todo")
                         row {
-                            style: "items-center justify-between px-1 py-2"
-                            text "待办" { style: "text-sm font-semibold text-blue-700" }
-                            text .store.c_todo { style: "text-xs text-gray-400 bg-white rounded-full px-2 py-0.5" }
+                            style: col_head
+                            text "待办" { style: col_name }
+                            text .store.c_todo { style: col_count }
                         }
                         col {
                             style: "gap-2"
@@ -222,32 +266,35 @@ widget board {
                                         key: card.id
                                         draggable: true
                                         ondragstart: .Drag(card.id)
-                                        style: "w-full bg-white rounded-lg px-3 py-2 shadow-sm gap-1"
+                                        style: card_base
                                         row {
                                             onclick: .CardClick(card.id),
-                                            style: "items-center gap-2 cursor-pointer"
+                                            style: card_click_row
                                             if card.priority == "P0" {
-                                                text "P0" { style: "text-[10px] text-red-600 bg-red-50 rounded px-1.5 py-0.5 font-medium" }
+                                                text "P0" { style: pri_p0 }
                                             }
                                             if card.priority == "P1" {
-                                                text "P1" { style: "text-[10px] text-orange-600 bg-orange-50 rounded px-1.5 py-0.5 font-medium" }
+                                                text "P1" { style: pri_p1 }
                                             }
                                             if card.priority == "P2" {
-                                                text "P2" { style: "text-[10px] text-gray-500 bg-gray-100 rounded px-1.5 py-0.5" }
+                                                text "P2" { style: pri_p2 }
                                             }
-                                            text card.title { style: "text-sm font-medium text-gray-800 truncate flex-1" }
-                                            text card.updated_at { style: "text-[10px] text-gray-400" }
+                                            text card.title { style: card_title }
+                                            text card.updated_at { style: time_label }
+                                        }
+                                        if card.detail != "" {
+                                            text card.detail { style: card_detail }
                                         }
                                         row {
                                             style: "items-center gap-1"
-                                            button "◀" { onclick: .MoveLeft(card.id, card.column), style: card_btn }
-                                            button "▶" { onclick: .MoveRight(card.id, card.column), style: card_btn }
-                                            button "▲" { onclick: .Shift(card.id, -1), style: card_btn }
-                                            button "▼" { onclick: .Shift(card.id, 1), style: card_btn }
+                                            button "◀" { onclick: .MoveLeft(card.id, card.column), style: act_btn }
+                                            button "▶" { onclick: .MoveRight(card.id, card.column), style: act_btn }
+                                            button "▲" { onclick: .Shift(card.id, -1), style: act_btn }
+                                            button "▼" { onclick: .Shift(card.id, 1), style: act_btn }
                                             if .store.confirm_delete_id == card.id {
-                                                button "确认" { onclick: .RemoveCard(card.id), style: "text-xs text-white bg-red-500 hover:bg-red-600 rounded px-2 py-0.5 w-auto" }
+                                                button "确认" { onclick: .RemoveCard(card.id), style: act_confirm }
                                             } else {
-                                                button "×" { onclick: .AskRemove(card.id), style: "text-xs text-gray-300 hover:text-red-500 w-auto px-1" }
+                                                button "×" { onclick: .AskRemove(card.id), style: act_del }
                                             }
                                         }
                                     }
@@ -255,15 +302,15 @@ widget board {
                             }
                         }
                     }
-                    // 进行中 doing
+                    // 进行中 doing（标题/count 跟 accent/primary）
                     col {
-                        style: "w-80 bg-orange-50 rounded-xl flex-shrink-0 p-3 gap-2"
+                        style: col_shell
                         ondragover.prevent: .AllowDrop
                         ondrop: .DropCol("doing")
                         row {
-                            style: "items-center justify-between px-1 py-2"
-                            text "进行中" { style: "text-sm font-semibold text-orange-600" }
-                            text .store.c_doing { style: "text-xs text-gray-400 bg-white rounded-full px-2 py-0.5" }
+                            style: col_head
+                            text "进行中" { style: col_name_primary }
+                            text .store.c_doing { style: col_count_primary }
                         }
                         col {
                             style: "gap-2"
@@ -273,32 +320,35 @@ widget board {
                                         key: card.id
                                         draggable: true
                                         ondragstart: .Drag(card.id)
-                                        style: "w-full bg-white rounded-lg px-3 py-2 shadow-sm gap-1"
+                                        style: card_base
                                         row {
                                             onclick: .CardClick(card.id),
-                                            style: "items-center gap-2 cursor-pointer"
+                                            style: card_click_row
                                             if card.priority == "P0" {
-                                                text "P0" { style: "text-[10px] text-red-600 bg-red-50 rounded px-1.5 py-0.5 font-medium" }
+                                                text "P0" { style: pri_p0 }
                                             }
                                             if card.priority == "P1" {
-                                                text "P1" { style: "text-[10px] text-orange-600 bg-orange-50 rounded px-1.5 py-0.5 font-medium" }
+                                                text "P1" { style: pri_p1 }
                                             }
                                             if card.priority == "P2" {
-                                                text "P2" { style: "text-[10px] text-gray-500 bg-gray-100 rounded px-1.5 py-0.5" }
+                                                text "P2" { style: pri_p2 }
                                             }
-                                            text card.title { style: "text-sm font-medium text-gray-800 truncate flex-1" }
-                                            text card.updated_at { style: "text-[10px] text-gray-400" }
+                                            text card.title { style: card_title }
+                                            text card.updated_at { style: time_label }
+                                        }
+                                        if card.detail != "" {
+                                            text card.detail { style: card_detail }
                                         }
                                         row {
                                             style: "items-center gap-1"
-                                            button "◀" { onclick: .MoveLeft(card.id, card.column), style: card_btn }
-                                            button "▶" { onclick: .MoveRight(card.id, card.column), style: card_btn }
-                                            button "▲" { onclick: .Shift(card.id, -1), style: card_btn }
-                                            button "▼" { onclick: .Shift(card.id, 1), style: card_btn }
+                                            button "◀" { onclick: .MoveLeft(card.id, card.column), style: act_btn }
+                                            button "▶" { onclick: .MoveRight(card.id, card.column), style: act_btn }
+                                            button "▲" { onclick: .Shift(card.id, -1), style: act_btn }
+                                            button "▼" { onclick: .Shift(card.id, 1), style: act_btn }
                                             if .store.confirm_delete_id == card.id {
-                                                button "确认" { onclick: .RemoveCard(card.id), style: "text-xs text-white bg-red-500 hover:bg-red-600 rounded px-2 py-0.5 w-auto" }
+                                                button "确认" { onclick: .RemoveCard(card.id), style: act_confirm }
                                             } else {
-                                                button "×" { onclick: .AskRemove(card.id), style: "text-xs text-gray-300 hover:text-red-500 w-auto px-1" }
+                                                button "×" { onclick: .AskRemove(card.id), style: act_del }
                                             }
                                         }
                                     }
@@ -308,13 +358,13 @@ widget board {
                     }
                     // 完成 done
                     col {
-                        style: "w-80 bg-green-50 rounded-xl flex-shrink-0 p-3 gap-2"
+                        style: col_shell
                         ondragover.prevent: .AllowDrop
                         ondrop: .DropCol("done")
                         row {
-                            style: "items-center justify-between px-1 py-2"
-                            text "完成" { style: "text-sm font-semibold text-green-600" }
-                            text .store.c_done_m { style: "text-xs text-gray-400 bg-white rounded-full px-2 py-0.5" }
+                            style: col_head
+                            text "完成" { style: col_name_muted }
+                            text .store.c_done_m { style: col_count_muted }
                         }
                         col {
                             style: "gap-2"
@@ -324,32 +374,35 @@ widget board {
                                         key: card.id
                                         draggable: true
                                         ondragstart: .Drag(card.id)
-                                        style: "w-full bg-white rounded-lg px-3 py-2 shadow-sm gap-1"
+                                        style: card_base
                                         row {
                                             onclick: .CardClick(card.id),
-                                            style: "items-center gap-2 cursor-pointer"
+                                            style: card_click_row
                                             if card.priority == "P0" {
-                                                text "P0" { style: "text-[10px] text-red-600 bg-red-50 rounded px-1.5 py-0.5 font-medium" }
+                                                text "P0" { style: pri_p0 }
                                             }
                                             if card.priority == "P1" {
-                                                text "P1" { style: "text-[10px] text-orange-600 bg-orange-50 rounded px-1.5 py-0.5 font-medium" }
+                                                text "P1" { style: pri_p1 }
                                             }
                                             if card.priority == "P2" {
-                                                text "P2" { style: "text-[10px] text-gray-500 bg-gray-100 rounded px-1.5 py-0.5" }
+                                                text "P2" { style: pri_p2 }
                                             }
-                                            text card.title { style: "text-sm font-medium text-gray-800 truncate flex-1" }
-                                            text card.updated_at { style: "text-[10px] text-gray-400" }
+                                            text card.title { style: card_title }
+                                            text card.updated_at { style: time_label }
+                                        }
+                                        if card.detail != "" {
+                                            text card.detail { style: card_detail }
                                         }
                                         row {
                                             style: "items-center gap-1"
-                                            button "◀" { onclick: .MoveLeft(card.id, card.column), style: card_btn }
-                                            button "▶" { onclick: .MoveRight(card.id, card.column), style: card_btn }
-                                            button "▲" { onclick: .Shift(card.id, -1), style: card_btn }
-                                            button "▼" { onclick: .Shift(card.id, 1), style: card_btn }
+                                            button "◀" { onclick: .MoveLeft(card.id, card.column), style: act_btn }
+                                            button "▶" { onclick: .MoveRight(card.id, card.column), style: act_btn }
+                                            button "▲" { onclick: .Shift(card.id, -1), style: act_btn }
+                                            button "▼" { onclick: .Shift(card.id, 1), style: act_btn }
                                             if .store.confirm_delete_id == card.id {
-                                                button "确认" { onclick: .RemoveCard(card.id), style: "text-xs text-white bg-red-500 hover:bg-red-600 rounded px-2 py-0.5 w-auto" }
+                                                button "确认" { onclick: .RemoveCard(card.id), style: act_confirm }
                                             } else {
-                                                button "×" { onclick: .AskRemove(card.id), style: "text-xs text-gray-300 hover:text-red-500 w-auto px-1" }
+                                                button "×" { onclick: .AskRemove(card.id), style: act_del }
                                             }
                                         }
                                     }
@@ -358,60 +411,60 @@ widget board {
                         }
                     }
                 }
-                // 编辑面板（板下方条件渲染；点卡片展开）
+                // 编辑面板（token 化卡片表面；点卡片打开）
                 if .store.editing_id != "" {
                     col {
-                        style: "bg-white rounded-xl border border-gray-200 p-4 gap-3"
+                        style: editor_panel
                         row {
                             style: "items-center gap-2"
-                            text "编辑卡片" { style: "text-sm font-semibold text-gray-700" }
-                            text .store.editing_id { style: "text-xs font-mono text-blue-600 bg-blue-50 rounded px-1.5 py-0.5" }
+                            text "编辑卡片" { style: "text-sm font-semibold text-foreground" }
+                            text .store.editing_id { style: plan_id_chip }
                         }
                         row {
-                            style: "items-center gap-2"
-                            text "标题" { style: "text-sm text-gray-500 w-auto" }
+                            style: field_row
+                            text "标题" { style: field_label }
                             input {
                                 value: .store.edit_title,
                                 oninput: .EditTitle,
                                 placeholder: "卡片标题…",
-                                style: "flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                                style: "px-3 py-2 border border-input rounded-md text-sm bg-background text-foreground flex-1"
                             }
                         }
                         row {
-                            style: "items-center gap-2"
-                            text "优先级" { style: "text-sm text-gray-500 w-auto" }
+                            style: field_row
+                            text "优先级" { style: field_label }
                             button "P0 紧急" {
                                 onclick: .SetPriority("P0"),
-                                style: if .store.edit_priority == "P0" { pri_btn_p0 } else { pri_btn }
+                                style: if .store.edit_priority == "P0" { pri_on_p0 } else { pri_off }
                             }
                             button "P1 高" {
                                 onclick: .SetPriority("P1"),
-                                style: if .store.edit_priority == "P1" { pri_btn_p1 } else { pri_btn }
+                                style: if .store.edit_priority == "P1" { pri_on_p1 } else { pri_off }
                             }
                             button "P2 普通" {
                                 onclick: .SetPriority("P2"),
-                                style: if .store.edit_priority == "P2" { pri_btn_p2 } else { pri_btn }
+                                style: if .store.edit_priority == "P2" { pri_on_p2 } else { pri_off }
                             }
                         }
                         col {
                             style: "gap-1"
-                            text "详情" { style: "text-sm text-gray-500" }
+                            text "详情" { style: field_label }
                             textarea {
                                 value: .store.edit_detail,
                                 oninput: .EditDetail,
                                 placeholder: "多行详情…",
-                                style: "w-full px-3 py-2 border border-gray-300 rounded-lg text-sm min-h-20"
+                                style: "w-full px-3 py-2 border border-input rounded-md text-sm bg-background text-foreground min-h-20"
                             }
                         }
                         row {
                             style: "items-center gap-2"
                             button "保存" {
                                 onclick: .SaveEditor,
-                                style: "px-4 py-2 bg-blue-500 text-white rounded-lg text-sm hover:bg-blue-600 w-auto"
+                                style: btn_primary
                             }
                             button "取消" {
                                 onclick: .CloseEditor,
-                                style: "px-4 py-2 bg-gray-100 text-gray-600 rounded-lg text-sm hover:bg-gray-200 w-auto"
+                                style: btn_secondary
                             }
                         }
                     }

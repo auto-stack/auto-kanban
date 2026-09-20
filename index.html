@@ -1,0 +1,882 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light" data-accent="indigo">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#ffffff" />
+<title>AutoUI Kanban</title>
+<style>
+/*
+ * AutoUI Kanban — Vue/VM parity surface (phone simulator mirror) · PLAN-038 Phase A
+ *
+ * 与 src/front/{app,pages/board}.at、gen/front/vue 使用同一套**核心**语义
+ * token（shadcn/AutoUI codegen 已生成键）。深浅主题与 accent 只改 CSS 变量。
+ * 禁止 class 引用扩展色 success/warning（脚手架未吐变量时两端不一致）。
+ * 结构：chrome 分段切换 → 工具行 → 三列 muted 壳 → bg-card 卡片 → 底部编辑面板。
+ */
+:root, [data-theme="light"] {
+  --background: 0 0% 100%;
+  --foreground: 222.2 84% 4.9%;
+  --card: 0 0% 100%;
+  --card-foreground: 222.2 84% 4.9%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222.2 84% 4.9%;
+  --primary: 239 84% 67%;
+  --primary-foreground: 210 40% 98%;
+  --secondary: 40 24% 85.5%;
+  --secondary-foreground: 222.2 47.4% 11.2%;
+  --muted: 210 40% 96.1%;
+  --muted-foreground: 215.4 16.3% 46.9%;
+  --accent: 210 40% 96.1%;
+  --accent-foreground: 222.2 47.4% 11.2%;
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 214.3 31.8% 91.4%;
+  --input: 214.3 31.8% 91.4%;
+  --ring: 239 84% 67%;
+  --success: 160 84% 39%;
+  --warning: 32 94% 44%;
+  --radius: 0.5rem;
+  --font: "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  color-scheme: light;
+}
+[data-theme="dark"] {
+  --background: 222.2 47% 7%;
+  --foreground: 210 40% 98%;
+  --card: 222.2 47% 10%;
+  --card-foreground: 210 40% 98%;
+  --popover: 222.2 47% 10%;
+  --popover-foreground: 210 40% 98%;
+  --primary: 239 84% 77%;
+  --primary-foreground: 222.2 47.4% 11.2%;
+  --secondary: 215 25% 27%;
+  --secondary-foreground: 210 40% 98%;
+  --muted: 217.2 32.6% 15%;
+  --muted-foreground: 215 20.2% 65.1%;
+  --accent: 217.2 32.6% 17.5%;
+  --accent-foreground: 210 40% 98%;
+  --destructive: 0 62.8% 30.6%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 217.2 32.6% 17.5%;
+  --input: 217.2 32.6% 17.5%;
+  --ring: 239 84% 77%;
+  --success: 160 84% 44%;
+  --warning: 38 92% 50%;
+  color-scheme: dark;
+}
+/* accent overrides primary/ring only — same as AutoUI applyAccent */
+[data-accent="indigo"] { --primary: 239 84% 67%; --ring: 239 84% 67%; }
+[data-accent="coral"]  { --primary: 24 94% 53%;  --ring: 24 94% 53%; }
+[data-accent="ocean"]  { --primary: 199 89% 48%; --ring: 199 89% 48%; }
+[data-accent="sage"]   { --primary: 172 66% 40%; --ring: 172 66% 40%; }
+[data-accent="amber"]  { --primary: 38 92% 50%;  --ring: 38 92% 50%; }
+[data-theme="dark"][data-accent="indigo"] { --primary: 239 84% 77%; --ring: 239 84% 77%; }
+[data-theme="dark"][data-accent="coral"]  { --primary: 24 94% 62%;  --ring: 24 94% 62%; }
+[data-theme="dark"][data-accent="ocean"]  { --primary: 199 89% 60%; --ring: 199 89% 60%; }
+[data-theme="dark"][data-accent="sage"]   { --primary: 172 66% 50%; --ring: 172 66% 50%; }
+[data-theme="dark"][data-accent="amber"]  { --primary: 38 92% 58%;  --ring: 38 92% 58%; }
+
+*, *::before, *::after { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; width: 100%; overflow: hidden; }
+body {
+  font-family: var(--font);
+  font-size: 14px;
+  color: hsl(var(--foreground));
+  background: hsl(var(--background));
+  -webkit-font-smoothing: antialiased;
+}
+button, input, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; border: 0; background: none; padding: 0; }
+:focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 2px; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
+
+.app { height: 100%; display: grid; grid-template-rows: auto auto 1fr; min-height: 0; min-width: 0; overflow: hidden; }
+
+/* chrome — mirrors app.at chrome_bar / seg_btn */
+.chrome {
+  display: flex; align-items: center; gap: 12px;
+  padding: 0 16px; height: 52px;
+  background: hsl(var(--card));
+  border-bottom: 1px solid hsl(var(--border));
+  min-width: 0; overflow: hidden; z-index: 20;
+}
+.brand { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.brand-name { font-size: 14px; font-weight: 650; letter-spacing: -0.01em; color: hsl(var(--foreground)); }
+.brand-board { font-size: 12px; color: hsl(var(--muted-foreground)); white-space: nowrap; }
+.chrome-spacer { flex: 1; min-width: 8px; }
+.chrome-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; min-width: 0; }
+
+.seg {
+  display: inline-flex; gap: 2px; padding: 2px;
+  background: hsl(var(--muted)); border: 1px solid hsl(var(--border));
+  border-radius: calc(var(--radius) + 2px);
+}
+.seg-btn {
+  height: 30px; padding: 0 12px; border-radius: var(--radius);
+  font-size: 12.5px; font-weight: 550; color: hsl(var(--muted-foreground));
+  white-space: nowrap; transition: background .15s, color .15s;
+}
+.seg-btn:hover { color: hsl(var(--foreground)); }
+.seg-btn[aria-pressed="true"] {
+  background: hsl(var(--primary) / 0.15);
+  color: hsl(var(--primary));
+  border: 1px solid hsl(var(--primary) / 0.4);
+  font-weight: 600;
+}
+.counts { font-size: 12px; color: hsl(var(--muted-foreground)); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.btn {
+  height: 34px; padding: 0 14px; border-radius: var(--radius);
+  font-size: 13px; font-weight: 550;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid transparent; transition: background .15s, color .15s, border-color .15s;
+}
+.btn-primary { background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); }
+.btn-primary:hover { filter: brightness(0.96); }
+.btn-secondary { background: hsl(var(--secondary)); color: hsl(var(--secondary-foreground)); }
+.btn-secondary:hover { filter: brightness(0.97); }
+.btn-ghost {
+  background: transparent; color: hsl(var(--muted-foreground));
+  border-color: hsl(var(--border));
+}
+.btn-ghost:hover { background: hsl(var(--accent)); color: hsl(var(--accent-foreground)); }
+.btn-icon { width: 34px; height: 34px; padding: 0; border-radius: var(--radius); color: hsl(var(--muted-foreground)); border: 1px solid hsl(var(--border)); background: hsl(var(--card)); }
+.btn-icon:hover { background: hsl(var(--accent)); color: hsl(var(--accent-foreground)); }
+.btn-icon.primary { background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); border-color: transparent; }
+.btn-icon svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+
+/* toolbar — mirrors board.at quick_row */
+.toolbar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 16px 4px; background: hsl(var(--background));
+  min-width: 0; max-width: 100%; overflow: hidden; flex-wrap: wrap;
+}
+.board-title { margin: 0; font-size: 16px; font-weight: 650; letter-spacing: -0.02em; color: hsl(var(--foreground)); }
+.board-meta { font-size: 12px; color: hsl(var(--muted-foreground)); }
+.toolbar-spacer { flex: 1; }
+.quick-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; width: 100%; }
+.input {
+  height: 38px; padding: 0 12px; border-radius: var(--radius);
+  border: 1px solid hsl(var(--input)); background: hsl(var(--background));
+  color: hsl(var(--foreground)); font-size: 13px; width: min(288px, 100%);
+  outline: none;
+}
+.input:focus { border-color: hsl(var(--primary)); box-shadow: 0 0 0 3px hsl(var(--primary) / 0.15); }
+.input::placeholder { color: hsl(var(--muted-foreground)); }
+
+/* board — mirrors board.at col_shell */
+.board-wrap { min-height: 0; min-width: 0; overflow: auto; padding: 12px 16px 20px; }
+.board { display: flex; align-items: flex-start; gap: 12px; min-height: 100%; }
+.col-tabs { display: none; gap: 6px; padding: 0 16px 8px; overflow-x: auto; }
+.col-tab {
+  height: 30px; padding: 0 12px; border-radius: 999px;
+  border: 1px solid hsl(var(--border)); background: hsl(var(--card));
+  color: hsl(var(--muted-foreground)); font-size: 12px; font-weight: 600; white-space: nowrap;
+}
+.col-tab[aria-pressed="true"] {
+  background: hsl(var(--primary) / 0.15); color: hsl(var(--primary));
+  border-color: hsl(var(--primary) / 0.4);
+}
+
+.col {
+  width: 288px; flex: 0 0 288px;
+  display: flex; flex-direction: column;
+  background: hsl(var(--muted) / 0.4);
+  border: 1px solid hsl(var(--border));
+  border-radius: calc(var(--radius) + 4px);
+  overflow: hidden; max-height: 100%;
+}
+.col-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 10px 8px; background: transparent;
+  border-bottom: 0;
+}
+.col-name { font-size: 13px; font-weight: 650; color: hsl(var(--foreground)); }
+.col.doing .col-name, .col.doing .col-count { color: hsl(var(--primary)); }
+.col.done .col-name, .col.done .col-count { color: hsl(var(--muted-foreground)); }
+.col-count {
+  margin-left: auto; font-size: 12px; font-weight: 550;
+  color: hsl(var(--muted-foreground));
+  background: hsl(var(--card)); border: 1px solid hsl(var(--border));
+  border-radius: 999px; padding: 2px 8px; font-variant-numeric: tabular-nums;
+}
+.col.doing .col-count {
+  background: hsl(var(--primary) / 0.1); border-color: hsl(var(--primary) / 0.3);
+}
+.col.done .col-count {
+  background: hsl(var(--muted)); border-color: hsl(var(--border));
+}
+.col-add {
+  width: 28px; height: 28px; border-radius: 6px; display: grid; place-items: center;
+  color: hsl(var(--muted-foreground));
+}
+.col-add:hover { background: hsl(var(--accent)); color: hsl(var(--accent-foreground)); }
+.col-add svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; }
+
+.col-body {
+  flex: 1; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 8px; min-height: 72px;
+}
+.col-body.drag-over {
+  background: hsl(var(--primary) / 0.08);
+  box-shadow: inset 0 0 0 2px hsl(var(--primary));
+}
+
+/* card — mirrors board.at card_base */
+.card {
+  background: hsl(var(--card)); color: hsl(var(--card-foreground));
+  border: 1px solid hsl(var(--border)); border-radius: var(--radius);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.05);
+  padding: 8px 12px; display: flex; flex-direction: column; gap: 8px;
+  cursor: grab; transition: border-color .15s, box-shadow .15s;
+}
+.card:hover { border-color: hsl(var(--primary) / 0.35); }
+.card.dragging { opacity: .45; }
+.card.confirm-delete { border-color: hsl(var(--destructive)); box-shadow: 0 0 0 3px hsl(var(--destructive) / 0.15); }
+
+.card-top { display: flex; align-items: center; gap: 8px; width: 100%; cursor: pointer; }
+.card-title {
+  flex: 1; min-width: 0; text-align: left;
+  font-size: 13.5px; font-weight: 550; color: hsl(var(--foreground));
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.card-detail {
+  font-size: 12px; color: hsl(var(--muted-foreground));
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.card-time { font-size: 12px; color: hsl(var(--muted-foreground)); flex-shrink: 0; }
+
+.pri {
+  flex-shrink: 0; font-size: 12px; font-weight: 650;
+  border-radius: 4px; padding: 2px 6px; line-height: 1.2;
+}
+.pri-p0 { color: hsl(var(--destructive)); background: hsl(var(--destructive) / 0.1); }
+.pri-p1 { color: hsl(var(--primary)); background: hsl(var(--primary) / 0.1); }
+.pri-p2 { color: hsl(var(--muted-foreground)); background: hsl(var(--muted)); }
+
+.card-actions { display: flex; align-items: center; gap: 2px; }
+.act {
+  min-width: 28px; height: 26px; padding: 0 6px; border-radius: 6px;
+  color: hsl(var(--muted-foreground)); font-size: 12px; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.act:hover { background: hsl(var(--accent)); color: hsl(var(--primary)); }
+.act.danger:hover { background: hsl(var(--destructive) / 0.1); color: hsl(var(--destructive)); }
+.act-confirm {
+  height: 26px; padding: 0 10px; border-radius: 6px; margin-right: 4px;
+  background: hsl(var(--destructive)); color: hsl(var(--primary-foreground));
+  font-size: 12px; font-weight: 600;
+}
+
+.empty-board, .empty-col {
+  margin: auto; text-align: center; color: hsl(var(--muted-foreground));
+  background: hsl(var(--card)); border: 1px solid hsl(var(--border));
+  border-radius: calc(var(--radius) + 4px); padding: 28px 20px;
+  display: flex; flex-direction: column; gap: 6px; align-items: center;
+}
+.empty-board { max-width: 360px; }
+.empty-board h3, .empty-col strong { margin: 0; color: hsl(var(--foreground)); font-size: 15px; font-weight: 650; }
+.empty-col { min-height: 88px; background: transparent; border-style: dashed; padding: 16px; font-size: 12.5px; }
+
+/* editor panel — mirrors board.at editor_panel (board下方，非独立抽屉) */
+.editor {
+  margin-top: 12px; background: hsl(var(--card)); color: hsl(var(--card-foreground));
+  border: 1px solid hsl(var(--border)); border-radius: calc(var(--radius) + 4px);
+  padding: 16px; display: none; flex-direction: column; gap: 12px;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.05);
+}
+.editor.open { display: flex; }
+.editor-title-row { display: flex; align-items: center; gap: 8px; }
+.editor-title-row h2 { margin: 0; font-size: 14px; font-weight: 650; }
+.id-chip {
+  font-size: 12px; font-weight: 550; color: hsl(var(--primary));
+  background: hsl(var(--primary) / 0.1); border-radius: 4px; padding: 2px 6px;
+}
+.field-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.field-label { font-size: 13px; color: hsl(var(--muted-foreground)); flex-shrink: 0; }
+.field { display: flex; flex-direction: column; gap: 4px; }
+.field textarea, .field input {
+  width: 100%; padding: 8px 12px; border-radius: var(--radius);
+  border: 1px solid hsl(var(--input)); background: hsl(var(--background));
+  color: hsl(var(--foreground)); font-size: 13px; outline: none;
+}
+.field textarea { min-height: 80px; resize: vertical; }
+.field textarea:focus, .field input:focus, .input:focus {
+  border-color: hsl(var(--primary)); box-shadow: 0 0 0 3px hsl(var(--primary) / 0.15);
+}
+.field-row .input { width: auto; flex: 1; min-width: 160px; }
+.pri-group { display: flex; gap: 6px; flex-wrap: wrap; }
+.pri-opt {
+  height: 34px; padding: 0 12px; border-radius: var(--radius);
+  border: 1px solid hsl(var(--border)); background: transparent;
+  color: hsl(var(--muted-foreground)); font-size: 12.5px; font-weight: 550;
+}
+.pri-opt[aria-pressed="true"].p0 { border-color: hsl(var(--destructive) / 0.5); background: hsl(var(--destructive) / 0.1); color: hsl(var(--destructive)); }
+.pri-opt[aria-pressed="true"].p1 { border-color: hsl(var(--primary) / 0.4); background: hsl(var(--primary) / 0.1); color: hsl(var(--primary)); }
+.pri-opt[aria-pressed="true"].p2 { background: hsl(var(--muted)); color: hsl(var(--foreground)); }
+
+/* plans read-only — same shells */
+.plans-board { display: flex; gap: 12px; align-items: flex-start; min-height: 100%; }
+.plan-card {
+  background: hsl(var(--card)); border: 1px solid hsl(var(--border));
+  border-radius: var(--radius); padding: 8px 12px; display: flex; flex-direction: column; gap: 4px;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.05);
+}
+.plan-id {
+  align-self: flex-start; font-size: 12px; font-weight: 550;
+  color: hsl(var(--primary)); background: hsl(var(--primary) / 0.1);
+  border-radius: 4px; padding: 2px 6px;
+}
+.plan-title { font-size: 13px; font-weight: 550; color: hsl(var(--foreground)); }
+.plan-meta { font-size: 12px; color: hsl(var(--muted-foreground)); }
+
+.toast-wrap { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 60; pointer-events: none; }
+.toast {
+  background: hsl(var(--foreground)); color: hsl(var(--background));
+  padding: 10px 16px; border-radius: var(--radius); font-size: 13px; font-weight: 550;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.15);
+}
+
+/* appearance popover */
+.pop-wrap { position: relative; }
+.popover {
+  position: absolute; top: calc(100% + 8px); right: 0; min-width: 200px;
+  background: hsl(var(--card)); border: 1px solid hsl(var(--border));
+  border-radius: calc(var(--radius) + 4px); box-shadow: 0 8px 30px rgb(0 0 0 / 0.12);
+  padding: 12px; z-index: 40; display: none;
+}
+.popover.open { display: block; }
+.pop-title { margin: 0 0 8px; font-size: 11px; font-weight: 650; color: hsl(var(--muted-foreground)); letter-spacing: .04em; text-transform: uppercase; }
+.pop-title:not(:first-child) { margin-top: 14px; }
+.theme-row, .accent-row { display: flex; gap: 6px; }
+.theme-opt {
+  flex: 1; height: 34px; border-radius: var(--radius);
+  border: 1px solid hsl(var(--border)); background: hsl(var(--muted));
+  color: hsl(var(--muted-foreground)); font-size: 12px; font-weight: 550;
+}
+.theme-opt[aria-pressed="true"] {
+  border-color: hsl(var(--primary)); background: hsl(var(--primary) / 0.15); color: hsl(var(--primary));
+}
+.accent-opt {
+  width: 32px; height: 32px; border-radius: 50%; border: 2px solid transparent; position: relative;
+}
+.accent-opt span { display: block; width: 100%; height: 100%; border-radius: 50%; }
+.accent-opt[aria-pressed="true"] { border-color: hsl(var(--foreground)); box-shadow: 0 0 0 2px hsl(var(--card)); }
+
+@media (max-width: 720px) {
+  .chrome { padding: 0 10px; gap: 8px; }
+  .toolbar { padding: 8px 10px 4px; }
+  .board-wrap { padding: 8px 10px 16px; }
+  .board { overflow-x: auto; scroll-snap-type: x mandatory; gap: 10px; }
+  .board::-webkit-scrollbar { height: 0; }
+  .col { width: min(86vw, 288px); flex-basis: min(86vw, 288px); scroll-snap-align: start; }
+  .col-tabs { display: flex; }
+  .brand-board { display: none; }
+  .counts { display: none; }
+  .seg-btn { padding: 0 10px; font-size: 12px; }
+  .input { width: 100%; }
+  .card-actions { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; }
+}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <header class="chrome">
+    <div class="brand">
+      <span class="brand-name">AutoUI Kanban</span>
+      <span class="brand-board" id="brandBoard">普通看板</span>
+    </div>
+    <div class="chrome-spacer"></div>
+    <div class="chrome-actions">
+      <div class="seg" role="tablist" aria-label="看板模式">
+        <button class="seg-btn" type="button" data-board="plans" aria-pressed="false">计划</button>
+        <button class="seg-btn" type="button" data-board="manual" aria-pressed="true">普通看板</button>
+      </div>
+      <span class="counts" id="countsLabel"></span>
+      <button class="btn-icon" type="button" id="btnRefresh" title="刷新" aria-label="刷新">
+        <svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.6-6.3"/><path d="M21 3v6h-6"/></svg>
+      </button>
+      <div class="pop-wrap">
+        <button class="btn-icon" type="button" id="btnAppearance" aria-label="主题与强调色" aria-haspopup="true" aria-expanded="false">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        </button>
+        <div class="popover" id="popAppearance">
+          <p class="pop-title">主题</p>
+          <div class="theme-row">
+            <button class="theme-opt" type="button" data-theme-val="light" aria-pressed="true">浅色</button>
+            <button class="theme-opt" type="button" data-theme-val="dark" aria-pressed="false">深色</button>
+          </div>
+          <p class="pop-title">Accent</p>
+          <div class="accent-row">
+            <button class="accent-opt" type="button" data-accent-val="indigo" aria-pressed="true" aria-label="indigo"><span style="background:#6366f1"></span></button>
+            <button class="accent-opt" type="button" data-accent-val="coral" aria-pressed="false" aria-label="coral"><span style="background:#f97316"></span></button>
+            <button class="accent-opt" type="button" data-accent-val="ocean" aria-pressed="false" aria-label="ocean"><span style="background:#0ea5e9"></span></button>
+            <button class="accent-opt" type="button" data-accent-val="sage" aria-pressed="false" aria-label="sage"><span style="background:#14b8a6"></span></button>
+            <button class="accent-opt" type="button" data-accent-val="amber" aria-pressed="false" aria-label="amber"><span style="background:#f59e0b"></span></button>
+          </div>
+        </div>
+      </div>
+      <button class="btn-icon primary" type="button" id="btnGlobalAdd" title="新建卡片" aria-label="新建卡片">
+        <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <div class="toolbar" id="toolbar">
+    <div>
+      <h1 class="board-title" id="boardTitle">普通看板</h1>
+      <div class="board-meta" id="boardMeta"></div>
+    </div>
+    <div class="toolbar-spacer"></div>
+    <div class="quick-row" id="quickRow">
+      <input class="input" id="quickInput" placeholder="输入卡片标题…" maxlength="200" />
+      <button class="btn btn-primary" type="button" id="btnAdd">＋ 添加</button>
+    </div>
+  </div>
+
+  <div class="board-wrap" id="boardWrap">
+    <div class="col-tabs" id="colTabs"></div>
+    <div class="board" id="board"></div>
+    <section class="editor" id="editor" aria-labelledby="editorHeading">
+      <div class="editor-title-row">
+        <h2 id="editorHeading">编辑卡片</h2>
+        <span class="id-chip" id="editIdChip"></span>
+      </div>
+      <div class="field-row">
+        <span class="field-label">标题</span>
+        <input class="input" id="editTitle" placeholder="卡片标题…" maxlength="200" />
+      </div>
+      <div class="field-row">
+        <span class="field-label">优先级</span>
+        <div class="pri-group" id="editPriGroup">
+          <button type="button" class="pri-opt p0" data-pri="P0" aria-pressed="false">P0 紧急</button>
+          <button type="button" class="pri-opt p1" data-pri="P1" aria-pressed="false">P1 高</button>
+          <button type="button" class="pri-opt p2" data-pri="P2" aria-pressed="true">P2 普通</button>
+        </div>
+      </div>
+      <div class="field">
+        <span class="field-label">详情</span>
+        <textarea id="editDetail" placeholder="多行详情…" rows="4"></textarea>
+      </div>
+      <div class="field-row">
+        <button class="btn btn-primary" type="button" id="btnSave">保存</button>
+        <button class="btn btn-secondary" type="button" id="btnCancel">取消</button>
+      </div>
+    </section>
+  </div>
+</div>
+<div class="toast-wrap" id="toastWrap" aria-live="polite"></div>
+
+<script>
+(function () {
+  "use strict";
+  const KEY = "autoui-kanban-parity-v1";
+  const COLS = [
+    { id: "todo", name: "待办" },
+    { id: "doing", name: "进行中" },
+    { id: "done", name: "完成" },
+  ];
+  const PLANS = [
+    { id: "drafting", name: "Drafting" },
+    { id: "executing", name: "Executing" },
+    { id: "execution_done", name: "Execution Done" },
+    { id: "reviewed", name: "Reviewed" },
+  ];
+  const ACCENTS = ["indigo", "coral", "ocean", "sage", "amber"];
+  const SEED = [
+    { id: "m1", title: "梳理双模式信息架构", detail: "普通看板可编辑，计划板只读。", priority: "P0", column: "todo", order: 0, updated_at: nowMinus(5 * 3600e3) },
+    { id: "m2", title: "统一 VM / Vue 语义 token", detail: "禁用 bg-blue-500 等硬编码色。", priority: "P1", column: "todo", order: 1, updated_at: nowMinus(26 * 3600e3) },
+    { id: "m3", title: "支持深浅主题与 5 种 accent", detail: "indigo / coral / ocean / sage / amber", priority: "P1", column: "doing", order: 0, updated_at: nowMinus(2 * 3600e3) },
+    { id: "m4", title: "编辑面板使用 card token", detail: "与列壳、卡片同一套 border/radius。", priority: "P2", column: "doing", order: 1, updated_at: nowMinus(8 * 3600e3) },
+    { id: "m5", title: "卡片操作按钮降噪", detail: "ghost 样式 ◀▶▲▼×，删除两击确认。", priority: "P2", column: "done", order: 0, updated_at: nowMinus(48 * 3600e3) },
+  ];
+  const SEED_PLANS = [
+    { id: "101", column: "drafting", title: "fixture active plan", progress: "1/3", updated_at: "2026-03-02", badge: "" },
+    { id: "102", column: "executing", title: "kanban UX redesign pass", progress: "2/5", updated_at: "2026-03-04", badge: "" },
+    { id: "103", column: "execution_done", title: "manual board data model", progress: "4/4", updated_at: "2026-02-28", badge: "" },
+    { id: "104", column: "reviewed", title: "theme token alignment", progress: "—", updated_at: "2026-02-20", badge: "" },
+  ];
+
+  function nowMinus(ms) { return Date.now() - ms; }
+  function uid() { return "m" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5); }
+  function esc(s) {
+    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+  function relTime(ts) {
+    if (!ts) return "—";
+    const d = typeof ts === "number" ? ts : Date.parse(ts);
+    if (Number.isNaN(d)) return String(ts).slice(0, 19).replace("T", " ");
+    const diff = Date.now() - d;
+    const m = Math.floor(diff / 60000);
+    if (m < 1) return "刚刚";
+    if (m < 60) return m + " 分钟前";
+    const h = Math.floor(m / 60);
+    if (h < 24) return h + " 小时前";
+    const days = Math.floor(h / 24);
+    if (days < 7) return days + " 天前";
+    return new Date(d).toISOString().slice(0, 10);
+  }
+  function toast(msg) {
+    const wrap = document.getElementById("toastWrap");
+    wrap.innerHTML = "";
+    const el = document.createElement("div");
+    el.className = "toast";
+    el.textContent = msg;
+    wrap.appendChild(el);
+    setTimeout(() => { wrap.innerHTML = ""; }, 1600);
+  }
+
+  const state = {
+    theme: "light",
+    accent: "indigo",
+    board: "manual",
+    cards: [],
+    plans: SEED_PLANS.slice(),
+    editingId: null,
+    confirmDeleteId: null,
+    dragId: null,
+  };
+
+  function load() {
+    try {
+      const raw = localStorage.getItem(KEY);
+      if (raw) {
+        const d = JSON.parse(raw);
+        if (d.theme === "dark" || d.theme === "light") state.theme = d.theme;
+        if (ACCENTS.includes(d.accent)) state.accent = d.accent;
+        if (d.board === "manual" || d.board === "plans") state.board = d.board;
+        if (Array.isArray(d.cards)) state.cards = d.cards;
+        if (Array.isArray(d.plans) && d.plans.length) state.plans = d.plans;
+        return;
+      }
+    } catch (_) {}
+    state.cards = SEED.map((c) => ({ ...c }));
+  }
+  function save() {
+    localStorage.setItem(KEY, JSON.stringify({
+      theme: state.theme, accent: state.accent, board: state.board,
+      cards: state.cards, plans: state.plans,
+    }));
+  }
+  function applyTheme() {
+    const html = document.documentElement;
+    html.setAttribute("data-theme", state.theme);
+    html.setAttribute("data-accent", state.accent);
+    document.querySelectorAll(".theme-opt").forEach((b) => {
+      b.setAttribute("aria-pressed", b.dataset.themeVal === state.theme ? "true" : "false");
+    });
+    document.querySelectorAll(".accent-opt").forEach((b) => {
+      b.setAttribute("aria-pressed", b.dataset.accentVal === state.accent ? "true" : "false");
+    });
+  }
+  function countIn(col) { return state.cards.filter((c) => c.column === col).length; }
+  function compact(col) {
+    state.cards.filter((c) => c.column === col).sort((a, b) => a.order - b.order)
+      .forEach((c, i) => { c.order = i; });
+  }
+  function addCard(title, column) {
+    const t = (title || "").trim();
+    if (!t) return false;
+    const col = column || "todo";
+    state.cards.push({
+      id: uid(), title: t, detail: "", priority: "P2",
+      column: col, order: countIn(col), updated_at: Date.now(),
+    });
+    compact(col); save(); render(); toast("已添加到「" + (COLS.find((c) => c.id === col) || { name: col }).name + "」");
+    return true;
+  }
+  function moveCard(id, col) {
+    const card = state.cards.find((c) => c.id === id);
+    if (!card) return;
+    if (card.column !== col) {
+      card.column = col;
+      card.order = state.cards.filter((c) => c.column === col && c.id !== id).length;
+      card.updated_at = Date.now();
+      compact("todo"); compact("doing"); compact("done");
+    }
+    state.dragId = null; state.confirmDeleteId = null;
+    save(); render();
+  }
+  function shiftCard(id, delta) {
+    const card = state.cards.find((c) => c.id === id);
+    if (!card) return;
+    const list = state.cards.filter((c) => c.column === card.column).sort((a, b) => a.order - b.order);
+    const idx = list.findIndex((c) => c.id === id);
+    const t = idx + delta;
+    if (t < 0 || t >= list.length) return;
+    const other = list[t];
+    const tmp = card.order; card.order = other.order; other.order = tmp;
+    list.sort((a, b) => a.order - b.order).forEach((c, i) => { c.order = i; });
+    card.updated_at = Date.now();
+    state.confirmDeleteId = null; save(); render();
+  }
+  function deleteCard(id) {
+    state.cards = state.cards.filter((c) => c.id !== id);
+    compact("todo"); compact("doing"); compact("done");
+    if (state.editingId === id) closeEditor();
+    state.confirmDeleteId = null; save(); render(); toast("卡片已删除");
+  }
+  function openEditor(id) {
+    const card = state.cards.find((c) => c.id === id);
+    if (!card) return;
+    state.editingId = id;
+    state.confirmDeleteId = null;
+    document.getElementById("editIdChip").textContent = card.id;
+    document.getElementById("editTitle").value = card.title || "";
+    document.getElementById("editDetail").value = card.detail || "";
+    document.querySelectorAll("#editPriGroup .pri-opt").forEach((b) => {
+      b.setAttribute("aria-pressed", b.dataset.pri === (card.priority || "P2") ? "true" : "false");
+    });
+    document.getElementById("editor").classList.add("open");
+    document.getElementById("editTitle").focus();
+  }
+  function closeEditor() {
+    state.editingId = null;
+    document.getElementById("editor").classList.remove("open");
+  }
+  function saveEditor() {
+    const title = document.getElementById("editTitle").value.trim();
+    const detail = document.getElementById("editDetail").value;
+    const pri = document.querySelector("#editPriGroup .pri-opt[aria-pressed='true']");
+    const priority = pri ? pri.dataset.pri : "P2";
+    if (!title) { toast("标题不能为空"); return; }
+    if (state.editingId) {
+      const card = state.cards.find((c) => c.id === state.editingId);
+      if (card) {
+        card.title = title; card.detail = detail; card.priority = priority;
+        card.updated_at = Date.now();
+      }
+      toast("已保存");
+    } else {
+      addCard(title, "todo");
+    }
+    closeEditor(); save(); render();
+  }
+
+  function cardHtml(card) {
+    const pri = (card.priority || "P2").toLowerCase();
+    const confirming = state.confirmDeleteId === card.id;
+    const actions = confirming
+      ? `<button class="act-confirm" type="button" data-act="confirm-del" data-id="${card.id}">确认</button>
+         <button class="act" type="button" data-act="cancel-del" data-id="${card.id}" aria-label="取消">×</button>`
+      : `<button class="act" type="button" data-act="left" data-id="${card.id}" aria-label="左移" ${card.column === "todo" ? "disabled" : ""}>◀</button>
+         <button class="act" type="button" data-act="right" data-id="${card.id}" aria-label="右移" ${card.column === "done" ? "disabled" : ""}>▶</button>
+         <button class="act" type="button" data-act="up" data-id="${card.id}" aria-label="上移">▲</button>
+         <button class="act" type="button" data-act="down" data-id="${card.id}" aria-label="下移">▼</button>
+         <button class="act danger" type="button" data-act="ask-del" data-id="${card.id}" aria-label="删除">×</button>`;
+    return `<article class="card${confirming ? " confirm-delete" : ""}${state.dragId === card.id ? " dragging" : ""}" data-id="${card.id}" draggable="true">
+      <div class="card-top" data-act="edit" data-id="${card.id}">
+        <span class="pri pri-${pri}">${esc(card.priority || "P2")}</span>
+        <span class="card-title">${esc(card.title)}</span>
+        <time class="card-time">${relTime(card.updated_at)}</time>
+      </div>
+      ${card.detail ? `<div class="card-detail">${esc(card.detail)}</div>` : ""}
+      <div class="card-actions">${actions}</div>
+    </article>`;
+  }
+
+  function renderManual() {
+    const board = document.getElementById("board");
+    board.className = "board";
+    document.getElementById("brandBoard").textContent = "普通看板";
+    document.getElementById("boardTitle").textContent = "普通看板";
+    document.getElementById("boardMeta").textContent =
+      state.cards.length === 0 ? "看板还是空的 · 点击上方添加第一张卡片"
+        : state.cards.length + " 张卡片 · " + countIn("doing") + " 进行中 · " + countIn("done") + " 已完成";
+    document.getElementById("countsLabel").textContent =
+      state.cards.length + " active / 0 archived";
+    document.getElementById("quickRow").style.display = "";
+    document.getElementById("editor").style.display = state.editingId ? "flex" : "";
+
+    document.getElementById("colTabs").innerHTML = COLS.map((c) =>
+      `<button class="col-tab" type="button" data-scroll-col="${c.id}">${c.name}<span> ${countIn(c.id)}</span></button>`
+    ).join("");
+
+    if (state.cards.length === 0) {
+      board.innerHTML = `<div class="empty-board"><h3>看板还是空的</h3><span>点击上方添加第一张卡片</span></div>`;
+      return;
+    }
+    board.innerHTML = COLS.map((col) => {
+      const cards = state.cards.filter((c) => c.column === col.id).sort((a, b) => a.order - b.order);
+      const body = cards.length
+        ? cards.map(cardHtml).join("")
+        : `<div class="empty-col"><strong>拖到这里</strong><span>或使用上方快速添加</span></div>`;
+      return `<section class="col ${col.id}" data-col="${col.id}">
+        <header class="col-head">
+          <span class="col-name">${col.name}</span>
+          <span class="col-count">${countIn(col.id)}</span>
+          <button class="col-add" type="button" data-act="focus-add" aria-label="在${col.name}添加卡片">
+            <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+          </button>
+        </header>
+        <div class="col-body" data-drop="${col.id}">${body}</div>
+      </section>`;
+    }).join("");
+  }
+
+  function renderPlans() {
+    const board = document.getElementById("board");
+    board.className = "plans-board";
+    document.getElementById("colTabs").innerHTML = "";
+    document.getElementById("brandBoard").textContent = "计划 · 只读";
+    document.getElementById("boardTitle").textContent = "计划跟踪";
+    document.getElementById("boardMeta").textContent = "数据源只读 · 状态归 auto-plan";
+    document.getElementById("countsLabel").textContent =
+      state.plans.length + " active / 0 archived";
+    document.getElementById("quickRow").style.display = "none";
+    document.getElementById("editor").style.display = "none";
+    board.innerHTML = PLANS.map((col) => {
+      const cards = state.plans.filter((p) => p.column === col.id);
+      return `<section class="col ${col.id === "executing" ? "doing" : col.id === "execution_done" ? "done" : "todo"}">
+        <header class="col-head">
+          <span class="col-name">${col.name}</span>
+          <span class="col-count">${cards.length}</span>
+        </header>
+        <div class="col-body">
+          ${cards.length ? cards.map((p) => `
+            <article class="plan-card">
+              <span class="plan-id">${esc(p.id)}</span>
+              <div class="plan-title">${esc(p.title)}</div>
+              <div class="plan-meta">${esc(p.progress || "—")} · ${esc(p.updated_at || "")}</div>
+            </article>`).join("") : `<div class="empty-col"><span>暂无计划</span></div>`}
+        </div>
+      </section>`;
+    }).join("");
+  }
+
+  function render() {
+    applyTheme();
+    document.querySelectorAll(".seg-btn").forEach((b) => {
+      b.setAttribute("aria-pressed", b.dataset.board === state.board ? "true" : "false");
+    });
+    document.getElementById("btnGlobalAdd").style.display = state.board === "manual" ? "" : "none";
+    if (state.board === "manual") renderManual(); else renderPlans();
+  }
+
+  function bind() {
+    document.querySelectorAll(".seg-btn").forEach((b) => {
+      b.addEventListener("click", () => {
+        state.board = b.dataset.board; closeEditor(); save(); render();
+      });
+    });
+    document.getElementById("btnRefresh").addEventListener("click", () => {
+      load(); closeEditor(); render(); toast("已刷新");
+    });
+    document.getElementById("btnAppearance").addEventListener("click", (e) => {
+      e.stopPropagation();
+      const pop = document.getElementById("popAppearance");
+      const open = !pop.classList.contains("open");
+      pop.classList.toggle("open", open);
+      e.currentTarget.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+    document.getElementById("popAppearance").addEventListener("click", (e) => {
+      e.stopPropagation();
+      const th = e.target.closest("[data-theme-val]");
+      if (th) { state.theme = th.dataset.themeVal; applyTheme(); save(); return; }
+      const ac = e.target.closest("[data-accent-val]");
+      if (ac) { state.accent = ac.dataset.accentVal; applyTheme(); save(); }
+    });
+    document.addEventListener("click", () => {
+      document.getElementById("popAppearance").classList.remove("open");
+      document.getElementById("btnAppearance").setAttribute("aria-expanded", "false");
+    });
+    document.getElementById("btnAdd").addEventListener("click", () => {
+      const inp = document.getElementById("quickInput");
+      if (addCard(inp.value, "todo")) inp.value = "";
+    });
+    document.getElementById("quickInput").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        if (addCard(e.target.value, "todo")) e.target.value = "";
+      }
+    });
+    document.getElementById("btnGlobalAdd").addEventListener("click", () => {
+      if (state.board !== "manual") return;
+      document.getElementById("quickInput").focus();
+    });
+    document.getElementById("btnSave").addEventListener("click", saveEditor);
+    document.getElementById("btnCancel").addEventListener("click", closeEditor);
+    document.getElementById("editPriGroup").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-pri]");
+      if (!b) return;
+      document.querySelectorAll("#editPriGroup .pri-opt").forEach((x) => x.setAttribute("aria-pressed", "false"));
+      b.setAttribute("aria-pressed", "true");
+    });
+
+    const board = document.getElementById("board");
+    board.addEventListener("click", (e) => {
+      const tab = e.target.closest("[data-scroll-col]");
+      if (tab) {
+        document.querySelectorAll(".col-tab").forEach((t) => t.setAttribute("aria-pressed", "false"));
+        tab.setAttribute("aria-pressed", "true");
+        const el = document.querySelector(`.col[data-col="${tab.dataset.scrollCol}"]`);
+        if (el) el.scrollIntoView({ behavior: "smooth", inline: "start", block: "nearest" });
+        return;
+      }
+      const btn = e.target.closest("[data-act]");
+      if (!btn) return;
+      const act = btn.dataset.act;
+      const id = btn.dataset.id;
+      if (act === "edit") return openEditor(id);
+      if (act === "focus-add") return document.getElementById("quickInput").focus();
+      if (act === "left") {
+        const c = state.cards.find((x) => x.id === id);
+        if (!c) return;
+        return moveCard(id, c.column === "doing" ? "todo" : c.column === "done" ? "doing" : c.column);
+      }
+      if (act === "right") {
+        const c = state.cards.find((x) => x.id === id);
+        if (!c) return;
+        return moveCard(id, c.column === "todo" ? "doing" : c.column === "doing" ? "done" : c.column);
+      }
+      if (act === "up") return shiftCard(id, -1);
+      if (act === "down") return shiftCard(id, 1);
+      if (act === "ask-del") {
+        state.confirmDeleteId = state.confirmDeleteId === id ? null : id;
+        return render();
+      }
+      if (act === "confirm-del") return deleteCard(id);
+      if (act === "cancel-del") { state.confirmDeleteId = null; return render(); }
+    });
+    board.addEventListener("dragstart", (e) => {
+      const card = e.target.closest(".card");
+      if (!card) return;
+      state.dragId = card.dataset.id;
+      state.confirmDeleteId = null;
+      try { e.dataTransfer.setData("text/plain", state.dragId); e.dataTransfer.effectAllowed = "move"; } catch (_) {}
+      card.classList.add("dragging");
+    });
+    board.addEventListener("dragend", (e) => {
+      const card = e.target.closest(".card");
+      if (card) card.classList.remove("dragging");
+      document.querySelectorAll(".col-body.drag-over").forEach((el) => el.classList.remove("drag-over"));
+      state.dragId = null;
+    });
+    board.addEventListener("dragover", (e) => {
+      const body = e.target.closest("[data-drop]");
+      if (!body) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      document.querySelectorAll(".col-body.drag-over").forEach((el) => { if (el !== body) el.classList.remove("drag-over"); });
+      body.classList.add("drag-over");
+    });
+    board.addEventListener("drop", (e) => {
+      const body = e.target.closest("[data-drop]");
+      if (!body) return;
+      e.preventDefault();
+      const id = state.dragId || (e.dataTransfer && e.dataTransfer.getData("text/plain"));
+      body.classList.remove("drag-over");
+      if (id) moveCard(id, body.dataset.drop);
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") { closeEditor(); state.confirmDeleteId = null; render(); }
+    });
+  }
+
+  load(); bind(); render();
+})();
+</script>
+</body>
+</html>

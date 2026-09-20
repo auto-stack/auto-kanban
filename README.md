@@ -70,6 +70,41 @@ manual 板数据文件默认 `data/manual.json`（相对运行 CWD），路径�
 写端点仅对 kind=manual 的板生效（经 boards_registry 按 kind 分发，
 lang_plans 板写请求落零卡/false）。
 
+## VM / Vue 视觉一致（parity · PLAN-038）
+
+普通看板与计划板 UI **单源**在 `src/front/*.at`。两端共用 AutoUI **核心**
+语义 token：
+
+`bg-background` `text-foreground` `bg-card` `bg-muted` `text-muted-foreground`
+`border-border` `bg-primary` `text-primary` `text-primary-foreground`
+`bg-secondary` `bg-destructive` `bg-accent` + 布局/字重 utility。
+
+**Phase A 纪律（app 侧缺省）**：
+
+- 本 app `.at` **缺省只用核心 token**（完成列 `text-muted-foreground` 降噪；
+  P1 = `text-primary` + `bg-primary/10`；P0 仍 `destructive`）。
+- `.at` **禁止** palette 硬编码（`bg-blue-500` 等）——VM 不翻色会与 Vue 分叉。
+- **改 UI 只改 `.at`** → `auto build` 再生 Vue。`gen/front/vue` **不是长期源**
+  （会被 codegen 覆载）。
+- 根目录 `index.html` 为手机模拟器镜像：同一 token 结构 + 深浅主题 + 5 accent。
+
+**Phase B（平台侧，PLAN-038 已落地）**：
+
+auto-lang registry / auto-man 脚手架已补齐扩展功能色与 P657-D2 stub：
+
+- `success` / `warning` / `info` / `error` 已进 scaffold/cli-vue/tauri 的
+  `index.css` CSS 变量与 `tailwind.config.cjs` 映射（值与 VM stella 同源）。
+- `auto build` 全路径写 `src/vite-env.d.ts` + `src/auto-select/overlay.ts`
+  + `src/auto-sources.ts`（不再依赖手工 stub）。
+- 此后 `.at` **可以**安全使用扩展 token（如 `text-success`）；本 app 缺省
+  仍沿 Phase A 中性映射，直到产品侧决定恢复。
+
+| 轨 | 入口 | 说明 |
+|---|---|---|
+| Vue | `auto run` → `gen/front/vue` | codegen 自 `.at` |
+| VM | `auto run -r vm` | 同一 `.at` 经 Iced 解析同一 token 词表 |
+| 手机模拟器 | 根目录 `index.html` | 镜像 `.at` 结构与核心 token |
+
 ## 测试
 
 ```bash
