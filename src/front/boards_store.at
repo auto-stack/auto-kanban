@@ -3,11 +3,10 @@
 //
 // 计数字段/最近归档在 handler 内预计算——VM view 不能调函数（Plan 402
 // 约束），模板只读字段。handler 间互调沿 041/038/013 先例（.LoadCurrent()）。
-use back.api: list_boards, board_cards, create_card, update_card, move_card, delete_card
-
-/// 写端点 body JSON 串构造用转义（语义同后端 manual_store.json_escape：
-/// 先反斜杠后引号再控制字符；VM 位置参数制下写端点第二形参为整条原始
-/// body 串，生成客户端按形参名包一层 {body: <此处构造的串>}，PLAN-021）。
+// PLAN-043 走查修复（2026-09-25）：`use back.api` 直接导入在桌面轨链接
+// 失败（Undefined symbol: api.list_boards——跨模块符号在 front build 期
+// 不可解析）——改 HTTP 配方（6 条 #[api] 路由直打，back 会话随 launch
+// 懒启；body 串构造/esc 转义本就是 HTTP 形态，PLAN-021 原设计）。
 fn esc(s str) str {
     var out str = s
     out = out.replace("\\", "\\\\")
@@ -20,9 +19,9 @@ fn esc(s str) str {
 
 store BoardsStore {
     model {
-        var boards []BoardDef = []
-        var cards []Card = []
-        var meta Meta = Meta { source_root: "", scanned_at: "", count_active: 0, count_archived: 0 }
+        var boards = []
+        var cards = []
+        var meta = { source_root: "", scanned_at: "", count_active: 0, count_archived: 0 }
         var current_id str = ""
         var current_title str = ""
         var current_kind str = ""
@@ -57,7 +56,7 @@ store BoardsStore {
         var archived_label str = ""
         // archived 折叠区
         var show_archived bool = false
-        var archived_recent []Card = []
+        var archived_recent = []
         var toggle_label str = "▸"
         // header 计数标签（预格式）
         var counts_label str = ""
@@ -68,7 +67,7 @@ store BoardsStore {
     on {
         .Init -> {
             .loading = true
-            .boards = list_boards()
+            .boards = Http.get_json("/api/boards")
             if .boards.len() > 0 {
                 .current_id = .boards[0].id
                 .current_title = .boards[0].title
@@ -81,7 +80,7 @@ store BoardsStore {
         }
         .Refresh -> {
             .loading = true
-            .boards = list_boards()
+            .boards = Http.get_json("/api/boards")
             // Refresh 后按 id 恢复 kind（boards 可能整体重建）
             var i int = 0
             while i < .boards.len() {
@@ -123,7 +122,7 @@ store BoardsStore {
             if title != "" {
                 if .current_kind == "manual" {
                     let body str = "{\"title\":\"" + esc(title) + "\",\"column\":\"todo\"}"
-                    create_card(.current_id, body)
+                    Http.post("/api/boards/" + .current_id + "/cards", body)
                     .LoadCurrent()
                 }
             }
@@ -146,7 +145,7 @@ store BoardsStore {
         .SaveEditor -> {
             if .editing_id != "" {
                 let body str = "{\"title\":\"" + esc(.edit_title) + "\",\"detail\":\"" + esc(.edit_detail) + "\",\"priority\":\"" + esc(.edit_priority) + "\"}"
-                update_card(.current_id, .editing_id, body)
+                Http.put("/api/boards/" + .current_id + "/cards/" + .editing_id, body)
                 .editing_id = ""
                 .LoadCurrent()
             }
@@ -167,7 +166,7 @@ store BoardsStore {
         .RemoveCard(cid str) -> {
             // 再击确认：cid 相符才执行；删后清确认位重拉
             if .confirm_delete_id == cid {
-                delete_card(.current_id, cid)
+                Http.delete("/api/boards/" + .current_id + "/cards/" + cid)
                 .confirm_delete_id = ""
                 .LoadCurrent()
             }
@@ -184,7 +183,7 @@ store BoardsStore {
                     i = i + 1
                 }
                 let body str = "{\"column\":\"" + col + "\",\"order\":" + tail.str() + "}"
-                move_card(.current_id, cid, body)
+                Http.put("/api/boards/" + .current_id + "/cards/" + cid + "/move", body)
                 .LoadCurrent()
             }
         }
@@ -217,7 +216,7 @@ store BoardsStore {
                     }
                     if neighbor >= 0 {
                         let body str = "{\"column\":\"" + col + "\",\"order\":" + neighbor.str() + "}"
-                        move_card(.current_id, cid, body)
+                        Http.put("/api/boards/" + .current_id + "/cards/" + cid + "/move", body)
                         .LoadCurrent()
                     }
                 }
@@ -236,7 +235,7 @@ store BoardsStore {
             if .current_id == "" {
                 return
             }
-            let r CardsResult = board_cards(.current_id)
+            let r = Http.get_json("/api/boards/" + .current_id + "/cards")
             .cards = r.cards
             .meta = r.meta
             .n_drafting = 0
@@ -250,7 +249,7 @@ store BoardsStore {
             var n_done_m int = 0
             var i int = 0
             while i < r.cards.len() {
-                let c Card = r.cards[i]
+                let c = r.cards[i]
                 if c.column == "drafting" {
                     .n_drafting = .n_drafting + 1
                 }
